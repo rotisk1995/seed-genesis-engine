@@ -68,6 +68,16 @@ function makeAgents(settlements, key) {
   }));
 }
 
+function normaliseAgents(agents, settlements, key) {
+  const generated = makeAgents(settlements, key);
+  if (!Array.isArray(agents) || !agents.length) return generated;
+  return agents.map((agent, index) => {
+    const fallback = generated[index % generated.length];
+    const home = settlements.some((settlement) => settlement.name === agent.home) ? agent.home : settlements[index % settlements.length].name;
+    return { ...fallback, ...agent, home, needs: { ...fallback.needs, ...(agent.needs || {}) } };
+  });
+}
+
 function fallbackWorld(seed) {
   const key = hash(seed.toLowerCase());
   const hasWater = /river|sea|tide|ocean|rain|flood|water/.test(seed.toLowerCase());
@@ -80,7 +90,7 @@ function fallbackWorld(seed) {
   const title = pick(names, key);
   const summary = hasWater ? "A people shaped by a shifting waterline, learning that every tide redistributes more than land." : hasForest ? "A living canopy responds to human choices, making honesty and survival newly entangled." : hasLight ? "Communities follow a source of light whose migration has begun to alter their values." : "Communities discover that one small rule has rearranged what they owe one another.";
   const settlements = [0, 1, 2, 3].map((index) => ({
-    name: pick(settlementNames, key + index * 7),
+    name: pick(settlementNames, key + index * 3),
     biome: biomes[index],
     trait: traits[index],
     population: 230 + ((key >> (index * 3)) % 650),
@@ -101,7 +111,7 @@ function fallbackWorld(seed) {
       { name: "The Stewards of Before", goal: "Protect the agreements that existed before the change.", influence: 49 },
       { name: "The Unmapped", goal: "Follow the consequences beyond any settlement’s control.", influence: 38 }
     ],
-    agents: makeAgents(settlements, key),
+    agents: normaliseAgents([], settlements, key),
     events: [
       { turn: 1, title: "A condition takes root", detail: `The world begins with one pressure: ${seed}`, icon: "✦", color: "#a8eb93" },
       { turn: 1, title: "The first adaptation", detail: `${settlements[0].name} changes a daily ritual to survive it. Other settlements cannot agree whether this is wisdom or theft.`, icon: "⌁", color: "#78e4db" },
@@ -113,6 +123,7 @@ function fallbackWorld(seed) {
 function normaliseLiveWorld(data, seed) {
   if (!data?.name || !Array.isArray(data.settlements)) return fallbackWorld(seed);
   const fallback = fallbackWorld(seed);
+  const settlements = data.settlements.map((settlement, index) => ({ ...fallback.settlements[index % fallback.settlements.length], ...settlement, relation: fallback.settlements[index % fallback.settlements.length].relation }));
   return {
     ...fallback,
     ...data,
@@ -121,8 +132,8 @@ function normaliseLiveWorld(data, seed) {
     pattern: "Causal divergence",
     patternDetail: data.insight,
     conditions: fallback.conditions,
-    settlements: data.settlements.map((settlement, index) => ({ ...fallback.settlements[index % fallback.settlements.length], ...settlement, relation: fallback.settlements[index % fallback.settlements.length].relation })),
-    agents: Array.isArray(data.agents) ? data.agents.map((agent, index) => ({ ...fallback.agents[index % fallback.agents.length], ...agent, needs: fallback.agents[index % fallback.agents.length].needs })) : fallback.agents,
+    settlements,
+    agents: normaliseAgents(data.agents, settlements, hash(seed)),
     events: data.events.map((event, index) => ({ ...event, turn: 1, icon: ["✦", "⌁", "◌", "↗"][index], color: palettes[index] }))
   };
 }
