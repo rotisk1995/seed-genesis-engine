@@ -34,6 +34,10 @@ The current demonstration prioritizes an inspectable causal loop:
 4. Advancing a world turn aggregates resident needs and local exchanges into agent state, cohesion, chronicle entries, and larger patterns.
 5. Creator decrees change the conditions that residents subsequently experience.
 
+## Cinematic observation
+
+Emergent Village is presented as an original elevated observer simulation. The camera follows settlements and meaningful encounters through a living terrain with readable residents, wildlife, construction, weather, and a day-night cycle. Information overlays remain compact and support observation; they do not replace the world as the primary experience.
+
 ## Success criteria
 
 - Runs begun from different seeds diverge.

@@ -158,7 +158,7 @@ function renderTrace() {
 }
 
 const needColors = { food: "#a8eb93", shelter: "#78e4db", belonging: "#c4a4f2", wonder: "#e3bc76" };
-const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, particles: [], encounters: [], exchanges: 0, lastCommittedExchanges: 0, lastFrame: 0, lastReadout: 0, running: false };
+const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, particles: [], wildlife: [], encounters: [], exchanges: 0, lastCommittedExchanges: 0, lastFrame: 0, lastReadout: 0, running: false, camera: { x: 0, y: 0, zoom: 1.16, focus: "" } };
 
 function fieldSites() {
   return [
@@ -167,6 +167,42 @@ function fieldSites() {
     { need: "wonder", x: 51, y: 18 + world.conditions.mystery * 0.05 },
     { need: "wonder", x: 79, y: 72 }
   ];
+}
+
+function worldPointToScreen(x, y) {
+  return {
+    x: ecosystem.width / 2 + (x - ecosystem.camera.x) * ecosystem.camera.zoom,
+    y: ecosystem.height / 2 + (y - ecosystem.camera.y) * ecosystem.camera.zoom * 0.72
+  };
+}
+
+function applyCameraTransform(context) {
+  context.translate(ecosystem.width / 2, ecosystem.height / 2);
+  context.scale(ecosystem.camera.zoom, ecosystem.camera.zoom * 0.72);
+  context.translate(-ecosystem.camera.x, -ecosystem.camera.y);
+}
+
+function currentWeather() {
+  if (world.conditions.water < 38) return "dry wind";
+  if (world.conditions.water > 78) return "river mist";
+  if (world.conditions.mystery > 78) return "silver haze";
+  return "clear air";
+}
+
+function updateCinematicCamera(now) {
+  const encounter = ecosystem.encounters.at(-1);
+  const selected = world.settlements[selectedIndex] || world.settlements[0];
+  const targetX = encounter ? encounter.x : (selected.x / 100) * ecosystem.width;
+  const targetY = encounter ? encounter.y : (selected.y / 100) * ecosystem.height;
+  ecosystem.camera.x += (targetX - ecosystem.camera.x) * 0.022;
+  ecosystem.camera.y += (targetY - ecosystem.camera.y) * 0.022;
+  ecosystem.camera.zoom += ((encounter ? 1.29 : 1.16) - ecosystem.camera.zoom) * 0.014;
+  ecosystem.camera.focus = encounter ? "following a resident encounter" : "observing " + selected.name;
+  if (now - ecosystem.lastReadout > 550) {
+    const phase = (now / 50000) % 1;
+    const time = phase < 0.2 || phase > 0.84 ? "nightfall" : phase < 0.33 ? "dawn" : phase > 0.68 ? "golden hour" : "daylight";
+    $("#cameraFocus").textContent = time + " / " + currentWeather() + " / " + ecosystem.camera.focus;
+  }
 }
 
 function seededRandom(value) {
@@ -283,6 +319,15 @@ function resetEcosystem() {
     const needs = Object.fromEntries(Object.entries(baseNeeds).map(([need, value], needIndex) => [need, clamp(value + ((seed >> (needIndex * 3)) % 19) - 9, 8, 100)]));
     return { seed, agentIndex, homeIndex, phase: (seed % 12) / 12, x, y, vx: 0, vy: 0, tail: [{ x, y }], needs, memories: 0, ties: {}, activity: "belonging", urgency: 0.5, lastNeedTick: performance.now(), lastEncounter: performance.now() + (seed % 1100) };
   });
+  ecosystem.wildlife = Array.from({ length: 15 }, (_, index) => {
+    const seed = hash(world.seed + ":wildlife:" + index);
+    const habitat = index % 3 === 0 ? "water" : "forest";
+    const x = (habitat === "water" ? 16 + (seed % 63) : 9 + (seed % 83)) / 100 * ecosystem.width;
+    const y = (habitat === "water" ? 31 + ((seed >> 6) % 47) : 12 + ((seed >> 5) % 75)) / 100 * ecosystem.height;
+    return { seed, habitat, x, y, vx: 0, vy: 0, phase: (seed % 17) / 17 };
+  });
+  const selected = world.settlements[selectedIndex] || world.settlements[0];
+  ecosystem.camera = { x: (selected.x / 100) * ecosystem.width, y: (selected.y / 100) * ecosystem.height, zoom: 1.16, focus: "observing " + selected.name };
   ecosystem.encounters = [];
   ecosystem.exchanges = 0;
   ecosystem.lastCommittedExchanges = 0;
@@ -335,6 +380,14 @@ function updateEcosystem(now) {
     if (!previous || Math.hypot(previous.x - particle.x, previous.y - particle.y) > 2.4) particle.tail.push({ x: particle.x, y: particle.y });
     if (particle.tail.length > 9) particle.tail.shift();
   });
+  ecosystem.wildlife.forEach((animal) => {
+    const drift = animal.habitat === "water" ? 0.025 : 0.018;
+    const direction = now / 1800 + animal.phase * 9;
+    animal.vx = (animal.vx + Math.cos(direction) * drift * dt) * 0.94;
+    animal.vy = (animal.vy + Math.sin(direction * 0.73) * drift * dt) * 0.94;
+    animal.x = Math.max(8, Math.min(ecosystem.width - 8, animal.x + animal.vx * dt));
+    animal.y = Math.max(8, Math.min(ecosystem.height - 8, animal.y + animal.vy * dt));
+  });
   let newEncounters = 0;
   for (let first = 0; first < ecosystem.particles.length; first += 1) {
     for (let second = first + 1; second < ecosystem.particles.length; second += 1) {
@@ -364,32 +417,103 @@ function updateEcosystem(now) {
   ecosystem.encounters = ecosystem.encounters.filter((encounter) => now - encounter.born < 1400);
 }
 
+function drawVillage(context, settlement, index, nightStrength) {
+  const x = (settlement.x / 100) * ecosystem.width;
+  const y = (settlement.y / 100) * ecosystem.height;
+  const buildingCount = Math.max(2, Math.min(6, 2 + Math.floor(settlement.population / 260)));
+  context.fillStyle = "rgba(0,0,0,.25)";
+  context.beginPath(); context.ellipse(x, y + 8, 27, 10, 0, 0, Math.PI * 2); context.fill();
+  for (let building = 0; building < buildingCount; building += 1) {
+    const offsetX = ((building % 3) - 1) * 11 + (Math.floor(building / 3) ? 7 : 0);
+    const offsetY = (Math.floor(building / 3) - 0.5) * 11;
+    const scale = 0.75 + ((hash(settlement.name + building) % 8) / 20);
+    context.fillStyle = "rgba(108,83,51,.86)";
+    context.fillRect(x + offsetX - 5 * scale, y + offsetY - 1, 10 * scale, 7 * scale);
+    context.fillStyle = index % 2 ? "rgba(73,56,40,.96)" : "rgba(91,65,43,.96)";
+    context.beginPath();
+    context.moveTo(x + offsetX - 7 * scale, y + offsetY - 1);
+    context.lineTo(x + offsetX, y + offsetY - 9 * scale);
+    context.lineTo(x + offsetX + 7 * scale, y + offsetY - 1);
+    context.closePath(); context.fill();
+    if (nightStrength > 0.22) {
+      context.fillStyle = "rgba(255,210,116," + (0.35 + nightStrength * 0.55) + ")";
+      context.fillRect(x + offsetX - scale, y + offsetY + 2, 2 * scale, 2 * scale);
+    }
+  }
+  context.strokeStyle = palettes[index % palettes.length] + "86";
+  context.lineWidth = 1.1;
+  context.beginPath(); context.arc(x, y, 18 + settlement.stability * 0.08, 0, Math.PI * 2); context.stroke();
+}
+
+function drawResidentSprite(context, particle) {
+  const color = needColors[particle.activity];
+  const size = 2.3 + particle.urgency * 1.5;
+  context.fillStyle = "rgba(0,0,0,.3)";
+  context.beginPath(); context.ellipse(particle.x, particle.y + size * 1.15, size * 1.2, size * 0.43, 0, 0, Math.PI * 2); context.fill();
+  context.strokeStyle = color;
+  context.lineWidth = 1.35;
+  context.beginPath(); context.moveTo(particle.x, particle.y - size * 0.45); context.lineTo(particle.x, particle.y + size * 0.9); context.stroke();
+  context.fillStyle = "#f4d7a0";
+  context.beginPath(); context.arc(particle.x, particle.y - size * 1.05, size * 0.52, 0, Math.PI * 2); context.fill();
+  context.fillStyle = color;
+  context.beginPath(); context.arc(particle.x, particle.y - size * 0.1, size * 0.7, 0, Math.PI * 2); context.fill();
+}
+
+function drawWildlife(context, animal) {
+  context.fillStyle = animal.habitat === "water" ? "rgba(117,220,214,.65)" : "rgba(220,181,111,.58)";
+  context.beginPath();
+  context.ellipse(animal.x, animal.y, animal.habitat === "water" ? 2.8 : 3.8, 1.6, Math.sin(animal.phase * Math.PI) * 0.4, 0, Math.PI * 2);
+  context.fill();
+}
+
+function drawSettlementLabels(context) {
+  context.save();
+  context.font = '500 10px "DM Mono", monospace';
+  context.textAlign = "center";
+  world.settlements.forEach((settlement, index) => {
+    const point = worldPointToScreen((settlement.x / 100) * ecosystem.width, (settlement.y / 100) * ecosystem.height);
+    context.fillStyle = index === selectedIndex ? "#e9e4d8" : "rgba(211,229,214,.74)";
+    context.fillText(settlement.name.toUpperCase(), point.x, point.y - 26);
+  });
+  context.restore();
+}
+
 function drawEcosystem(now) {
   const context = ecosystem.context;
   if (!context) return;
+  const cycle = (now / 50000) % 1;
+  const daylight = 0.08 + 0.92 * Math.max(0, Math.sin(cycle * Math.PI * 2 - Math.PI / 2) * 0.5 + 0.5);
+  const nightStrength = 1 - daylight;
+  updateCinematicCamera(now);
   context.clearRect(0, 0, ecosystem.width, ecosystem.height);
+  context.save();
+  applyCameraTransform(context);
   if (ecosystem.terrain) context.drawImage(ecosystem.terrain, 0, 0, ecosystem.terrain.width, ecosystem.terrain.height, 0, 0, ecosystem.width, ecosystem.height);
-  const lightX = ecosystem.width * (0.52 + Math.sin(now / 12000) * 0.11);
-  const light = context.createRadialGradient(lightX, ecosystem.height * 0.28, 8, lightX, ecosystem.height * 0.28, ecosystem.width * 0.42);
-  light.addColorStop(0, "rgba(255,235,180,.09)");
-  light.addColorStop(1, "rgba(255,235,180,0)");
-  context.fillStyle = light;
+
+  const dawnGlow = context.createRadialGradient(ecosystem.camera.x, ecosystem.camera.y - ecosystem.height * 0.24, 8, ecosystem.camera.x, ecosystem.camera.y - ecosystem.height * 0.24, ecosystem.width * 0.58);
+  dawnGlow.addColorStop(0, "rgba(255,220,145," + (0.08 + daylight * 0.11) + ")");
+  dawnGlow.addColorStop(1, "rgba(255,220,145,0)");
+  context.fillStyle = dawnGlow;
   context.fillRect(0, 0, ecosystem.width, ecosystem.height);
+
   fieldSites().forEach((site) => {
     const x = (site.x / 100) * ecosystem.width;
     const y = (site.y / 100) * ecosystem.height;
-    const glow = context.createRadialGradient(x, y, 1, x, y, 23);
-    glow.addColorStop(0, needColors[site.need] + "26");
+    const glow = context.createRadialGradient(x, y, 1, x, y, 26);
+    glow.addColorStop(0, needColors[site.need] + "34");
     glow.addColorStop(1, needColors[site.need] + "00");
     context.fillStyle = glow;
-    context.beginPath(); context.arc(x, y, 23, 0, Math.PI * 2); context.fill();
+    context.beginPath(); context.arc(x, y, 26, 0, Math.PI * 2); context.fill();
   });
+
+  world.settlements.forEach((settlement, index) => drawVillage(context, settlement, index, nightStrength));
+  ecosystem.wildlife.slice().sort((a, b) => a.y - b.y).forEach((animal) => drawWildlife(context, animal));
   ecosystem.particles.forEach((particle) => {
     const color = needColors[particle.activity];
     if (particle.tail.length > 1) {
       context.beginPath();
       particle.tail.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
-      context.strokeStyle = color + "32";
+      context.strokeStyle = color + "2d";
       context.lineWidth = 1;
       context.stroke();
     }
@@ -398,20 +522,24 @@ function drawEcosystem(now) {
     const life = 1 - (now - encounter.born) / 1400;
     context.globalAlpha = Math.max(0, life);
     context.strokeStyle = encounter.color;
-    context.lineWidth = 1;
-    context.beginPath(); context.arc(encounter.x, encounter.y, 5 + (1 - life) * 17, 0, Math.PI * 2); context.stroke();
+    context.lineWidth = 1.2;
+    context.beginPath(); context.arc(encounter.x, encounter.y, 7 + (1 - life) * 20, 0, Math.PI * 2); context.stroke();
   });
   context.globalAlpha = 1;
-  ecosystem.particles.forEach((particle) => {
-    const color = needColors[particle.activity];
-    context.fillStyle = color;
-    context.globalAlpha = 0.52 + particle.urgency * 0.45;
-    context.shadowColor = color;
-    context.shadowBlur = 6;
-    context.beginPath(); context.arc(particle.x, particle.y, 1.65 + particle.urgency * 1.2, 0, Math.PI * 2); context.fill();
-  });
-  context.globalAlpha = 1;
-  context.shadowBlur = 0;
+  ecosystem.particles.slice().sort((a, b) => a.y - b.y).forEach((particle) => drawResidentSprite(context, particle));
+  context.restore();
+
+  const darkness = context.createLinearGradient(0, 0, 0, ecosystem.height);
+  darkness.addColorStop(0, "rgba(5,14,25," + (nightStrength * 0.16) + ")");
+  darkness.addColorStop(1, "rgba(2,8,14," + (nightStrength * 0.46) + ")");
+  context.fillStyle = darkness;
+  context.fillRect(0, 0, ecosystem.width, ecosystem.height);
+  const vignette = context.createRadialGradient(ecosystem.width / 2, ecosystem.height / 2, ecosystem.width * 0.16, ecosystem.width / 2, ecosystem.height / 2, ecosystem.width * 0.72);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, "rgba(0,8,7,.34)");
+  context.fillStyle = vignette;
+  context.fillRect(0, 0, ecosystem.width, ecosystem.height);
+  drawSettlementLabels(context);
   if (now - ecosystem.lastReadout > 550) {
     ecosystem.lastReadout = now;
     updateEcosystemReadout();
@@ -447,6 +575,18 @@ function initialiseEcosystem() {
   if (!canvas || ecosystem.canvas === canvas) return;
   ecosystem.canvas = canvas;
   ecosystem.context = canvas.getContext("2d");
+  ecosystem.canvas.addEventListener("click", (event) => {
+    const bounds = ecosystem.canvas.getBoundingClientRect();
+    const screenX = (event.clientX - bounds.left) * (ecosystem.width / bounds.width);
+    const screenY = (event.clientY - bounds.top) * (ecosystem.height / bounds.height);
+    const worldX = (screenX - ecosystem.width / 2) / ecosystem.camera.zoom + ecosystem.camera.x;
+    const worldY = (screenY - ecosystem.height / 2) / (ecosystem.camera.zoom * 0.72) + ecosystem.camera.y;
+    const nearest = world.settlements.map((settlement, index) => ({ index, distance: Math.hypot(worldX - (settlement.x / 100) * ecosystem.width, worldY - (settlement.y / 100) * ecosystem.height) })).sort((a, b) => a.distance - b.distance)[0];
+    if (nearest && nearest.distance < 42) {
+      selectedIndex = nearest.index;
+      render();
+    }
+  });
   window.addEventListener("resize", resizeEcosystem);
   resetEcosystem();
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -458,21 +598,6 @@ function initialiseEcosystem() {
 }
 
 function renderMap() {
-  const map = $("#worldMap");
-  map.querySelectorAll(".settlement").forEach((node) => node.remove());
-  const template = $("#settlementTemplate");
-  world.settlements.forEach((settlement, index) => {
-    const node = template.content.firstElementChild.cloneNode(true);
-    node.style.left = `${settlement.x}%`;
-    node.style.top = `${settlement.y}%`;
-    node.style.setProperty("--settlement", palettes[index % palettes.length]);
-    node.classList.toggle("active", index === selectedIndex);
-    node.querySelector("b").textContent = settlement.name;
-    node.querySelector("small").textContent = settlement.biome;
-    node.querySelector("em").style.background = `linear-gradient(90deg, ${palettes[index % palettes.length]}, var(--cyan))`;
-    node.addEventListener("click", () => { selectedIndex = index; render(); });
-    map.append(node);
-  });
   updateEcosystemReadout();
 }
 
