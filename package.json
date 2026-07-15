@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check public/app.js"
+    "check": "node --check server.mjs && node --check public/app.js && node --check public/cinematic.js"
+  },
+  "dependencies": {
+    "three": "^0.181.0"
   }
 }

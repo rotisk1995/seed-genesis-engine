@@ -4,12 +4,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
+const publicRoot = path.resolve(root, "public");
+const threeModule = path.resolve(root, "node_modules", "three", "build", "three.module.js");
 const port = Number(process.env.PORT || 3000);
 const model = process.env.OPENAI_MODEL || "gpt-5.6";
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8"
 };
@@ -103,8 +106,8 @@ const decreeSchema = {
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const requested = url.pathname === "/" ? "/index.html" : url.pathname;
-  const filePath = path.resolve(root, "public", `.${requested}`);
-  if (!filePath.startsWith(path.resolve(root, "public"))) return send(res, 403, "Forbidden", "text/plain");
+  const filePath = requested === "/vendor/three.module.js" ? threeModule : path.resolve(publicRoot, `.${requested}`);
+  if (requested !== "/vendor/three.module.js" && !filePath.startsWith(publicRoot)) return send(res, 403, "Forbidden", "text/plain");
   try {
     const file = await readFile(filePath);
     send(res, 200, file.toString(), mimeTypes[path.extname(filePath)] || "application/octet-stream");

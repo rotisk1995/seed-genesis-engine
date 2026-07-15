@@ -1,3 +1,5 @@
+import { createCinematicRenderer } from "./cinematic.js";
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, Math.round(value)));
@@ -159,6 +161,7 @@ function renderTrace() {
 
 const needColors = { food: "#a8eb93", shelter: "#78e4db", belonging: "#c4a4f2", wonder: "#e3bc76" };
 const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, particles: [], wildlife: [], encounters: [], exchanges: 0, lastCommittedExchanges: 0, lastFrame: 0, lastReadout: 0, running: false, camera: { x: 0, y: 0, zoom: 1.16, focus: "" } };
+let cinematic = null;
 
 function fieldSites() {
   return [
@@ -297,6 +300,7 @@ function resizeEcosystem() {
   ecosystem.canvas.height = Math.round(ecosystem.height * density);
   ecosystem.context.setTransform(density, 0, 0, density, 0, 0);
   rebuildTerrainLayer();
+  cinematic?.resize();
 }
 
 function resetEcosystem() {
@@ -479,6 +483,15 @@ function drawSettlementLabels(context) {
 }
 
 function drawEcosystem(now) {
+  if (cinematic?.enabled) {
+    updateCinematicCamera(now);
+    cinematic.render({ world, particles: ecosystem.particles, wildlife: ecosystem.wildlife, encounters: ecosystem.encounters, selectedIndex, width: ecosystem.width, height: ecosystem.height }, now);
+    if (now - ecosystem.lastReadout > 550) {
+      ecosystem.lastReadout = now;
+      updateEcosystemReadout();
+    }
+    return;
+  }
   const context = ecosystem.context;
   if (!context) return;
   const cycle = (now / 50000) % 1;
@@ -575,6 +588,11 @@ function initialiseEcosystem() {
   if (!canvas || ecosystem.canvas === canvas) return;
   ecosystem.canvas = canvas;
   ecosystem.context = canvas.getContext("2d");
+  const cinematicCanvas = $("#cinematicCanvas");
+  if (cinematicCanvas) {
+    cinematic = createCinematicRenderer(cinematicCanvas);
+    if (cinematic.enabled) $("#worldMap").classList.add("cinematic-ready");
+  }
   ecosystem.canvas.addEventListener("click", (event) => {
     const bounds = ecosystem.canvas.getBoundingClientRect();
     const screenX = (event.clientX - bounds.left) * (ecosystem.width / bounds.width);
