@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#081614" />
+    <title>SEED — A Genesis Engine for Emergent Worlds</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="atmosphere"></div>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="SEED home"><span class="seed-mark"><i></i><i></i><b></b></span><span>SEED</span></a>
+        <div class="topbar-center"><span class="live-dot"></span> causal world simulator <span class="slash">/</span> v0.1</div>
+        <button class="text-button" id="resetButton">reset world</button>
+      </header>
+
+      <section class="hero" id="top">
+        <div class="hero-copy">
+          <p class="eyebrow">A GENESIS ENGINE FOR EMERGENT WORLDS</p>
+          <h1>Don’t write the story.<br /><em>Grow the conditions</em> for it.</h1>
+          <p class="lede">SEED turns a premise into a world of pressures, relationships, and cascading consequences. The system remembers what changed—and lets the unexpected become history.</p>
+          <div class="principles"><span><b>01</b> Simple rules</span><span><b>02</b> Autonomous dynamics</span><span><b>03</b> Emergent meaning</span></div>
+        </div>
+        <div class="hero-signal"><div class="signal-grid"></div><p>THE ENGINE OBSERVES</p><strong>need → behavior → pattern</strong><span>Every simulation is a new ecology of choices.</span></div>
+      </section>
+
+      <section class="genesis-panel">
+        <div class="panel-label"><span>01</span> Plant a seed</div>
+        <div class="seed-form"><textarea id="seedInput" maxlength="360" aria-label="World seed">A river valley where memory becomes more valuable every winter.</textarea><button class="primary-button" id="genesisButton"><span>Begin genesis</span><i>↗</i></button></div>
+        <div class="seed-examples" aria-label="Seed examples"><button data-seed="A tidal planet where every retreating ocean reveals the ruins of a different civilization.">Tidal ruins</button><button data-seed="A forest grows faster wherever people tell the truth, but its roots demand to be heard.">Truth forest</button><button data-seed="Five communities share a migrating source of light that keeps their crops alive.">Migrating sun</button></div>
+        <p class="engine-note" id="engineNote"><span class="live-dot"></span> deterministic core online <b>•</b> GPT‑5.6 narration optional</p>
+      </section>
+
+      <section class="world-workspace" aria-label="World workspace">
+        <aside class="world-sidebar">
+          <div class="world-title"><p class="eyebrow">CURRENT WORLD</p><h2 id="worldName">Asterra</h2><p id="worldSummary">A valley learning whether memory is inheritance, currency, or a burden.</p></div>
+          <div class="era-readout"><span>ERA</span><strong id="eraName">The First Thaw</strong><small id="turnCount">turn 01</small></div>
+          <div class="condition-list" id="conditionList"></div>
+          <div class="world-pattern"><p>PATTERN DETECTED</p><strong id="patternName">Memory commons</strong><span id="patternDetail">Knowledge moves along the river more reliably than goods.</span></div>
+        </aside>
+
+        <div class="world-stage">
+          <div class="stage-toolbar"><span>WORLD TOPOLOGY</span><span class="map-scale">⌁ 1 : 24,000</span></div>
+          <div class="map-frame" id="worldMap" role="region" aria-label="Interactive world map"><div class="map-river river-one"></div><div class="map-river river-two"></div><div class="map-contour contour-one"></div><div class="map-contour contour-two"></div><div class="map-stars"></div><div class="map-caption">Select a settlement to observe its local reality.</div></div>
+          <div class="stage-footer"><span><i class="pulse"></i> simulation active</span><span id="mapStatus">4 settlements / 3 tensions / 1 shared river</span></div>
+        </div>
+
+        <aside class="inspector" id="inspector"></aside>
+      </section>
+
+      <section class="intervention-grid">
+        <div class="decree-card">
+          <div class="panel-label"><span>02</span> Introduce a force</div><h2>Make a decree.<br />Then watch it <em>echo.</em></h2>
+          <div class="decree-input"><input id="decreeInput" maxlength="220" value="The river begins to forget the names of the dead." aria-label="Decree" /><button id="decreeButton" aria-label="Issue decree">↑</button></div>
+          <div class="decree-options"><button data-decree="A new road cuts through the moonwood.">new road</button><button data-decree="The valley receives three years of rain in one night.">heavy rain</button><button data-decree="No one may own a memory alone.">memory commons</button></div>
+        </div>
+        <div class="faction-card"><div class="panel-label"><span>03</span> Living pressures</div><div id="factionList"></div></div>
+      </section>
+
+      <section class="chronicle-section">
+        <div class="chronicle-heading"><div><p class="eyebrow">WORLD CHRONICLE</p><h2>Nothing happens alone.</h2></div><p id="worldInsight">A world becomes alive when its rules begin producing consequences no one explicitly designed.</p></div>
+        <div class="chronicle" id="chronicle"></div>
+      </section>
+      <footer><span>SEED / OBSERVE · LEARN · EVOLVE</span><span>Built for worlds that surprise their creators.</span></footer>
+    </main>
+    <template id="settlementTemplate"><button class="settlement"><span class="settlement-core"></span><span class="settlement-card"><b></b><small></small><em></em></span></button></template>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
