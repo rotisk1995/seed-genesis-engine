@@ -165,10 +165,12 @@ let cinematic = null;
 
 function fieldSites() {
   return [
-    { need: "food", x: 18 + world.conditions.water * 0.08, y: 57 },
-    { need: "food", x: 72, y: 31 + (100 - world.conditions.water) * 0.06 },
-    { need: "wonder", x: 51, y: 18 + world.conditions.mystery * 0.05 },
-    { need: "wonder", x: 79, y: 72 }
+    { need: "food", x: 18 + world.conditions.water * 0.08, y: 57, label: "reed fields" },
+    { need: "food", x: 72, y: 31 + (100 - world.conditions.water) * 0.06, label: "orchard" },
+    { need: "shelter", x: 29, y: 24, label: "timber stand" },
+    { need: "belonging", x: 62, y: 56, label: "shared hearth" },
+    { need: "wonder", x: 51, y: 18 + world.conditions.mystery * 0.05, label: "standing stones" },
+    { need: "wonder", x: 79, y: 72, label: "old observatory" }
   ];
 }
 
@@ -235,6 +237,21 @@ function rebuildTerrainLayer() {
     context.fill();
   }
 
+  for (let ridge = 0; ridge < 3; ridge += 1) {
+    const base = height * (0.08 + ridge * 0.12);
+    context.fillStyle = ridge === 0 ? "rgba(30,74,63,.25)" : "rgba(39,91,68,.17)";
+    context.beginPath();
+    context.moveTo(-20, base + 38);
+    for (let peak = 0; peak < 8; peak += 1) {
+      const x = (peak / 7) * (width + 40) - 20;
+      const y = base - (18 + random() * 56) + Math.sin(peak * 1.7 + ridge) * 14;
+      context.lineTo(x, y);
+    }
+    context.lineTo(width + 20, base + 42);
+    context.closePath();
+    context.fill();
+  }
+
   context.lineCap = "round";
   for (let contour = 0; contour < 13; contour += 1) {
     const y = height * (0.05 + contour * 0.075) + (random() - 0.5) * 38;
@@ -261,8 +278,14 @@ function rebuildTerrainLayer() {
     const x = random() * width;
     const y = random() * height;
     const radius = 2 + random() * 6;
-    context.fillStyle = tree % 3 ? "rgba(61,125,82,.16)" : "rgba(120,181,91,.12)";
-    context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill();
+    context.fillStyle = "rgba(3,21,16,.2)";
+    context.beginPath(); context.ellipse(x + radius * 0.7, y + radius * 0.8, radius * 1.15, radius * 0.45, 0, 0, Math.PI * 2); context.fill();
+    context.fillStyle = "rgba(75,67,39,.28)";
+    context.fillRect(x - .65, y - radius * .05, 1.3, radius * 1.5);
+    context.fillStyle = tree % 3 ? "rgba(61,125,82,.24)" : "rgba(120,181,91,.19)";
+    context.beginPath(); context.arc(x, y - radius * .3, radius, 0, Math.PI * 2); context.fill();
+    context.fillStyle = "rgba(150,211,106,.07)";
+    context.beginPath(); context.arc(x - radius * .28, y - radius * .58, radius * .46, 0, Math.PI * 2); context.fill();
   }
 
   context.setLineDash([3, 7]);
@@ -346,9 +369,14 @@ function particleTarget(particle, now) {
   const travelling = Math.floor(now / 3800 + particle.phase) % 2 === 0;
   const sites = fieldSites();
   let destination = home;
-  if (need === "food") destination = travelling ? sites[particle.seed % 2] : home;
-  if (need === "belonging") destination = travelling ? { x: (home.x + neighbour.x) / 2, y: (home.y + neighbour.y) / 2 } : neighbour;
-  if (need === "wonder") destination = sites[2 + (particle.seed % 2)];
+  const foodSites = sites.filter((site) => site.need === "food");
+  const shelterSites = sites.filter((site) => site.need === "shelter");
+  const belongingSites = sites.filter((site) => site.need === "belonging");
+  const wonderSites = sites.filter((site) => site.need === "wonder");
+  if (need === "food") destination = travelling ? foodSites[particle.seed % foodSites.length] : home;
+  if (need === "shelter") destination = travelling ? shelterSites[0] : home;
+  if (need === "belonging") destination = travelling ? belongingSites[0] : neighbour;
+  if (need === "wonder") destination = wonderSites[particle.seed % wonderSites.length];
   const sway = Math.sin(now / 850 + particle.phase * 7) * 1.6;
   return { need, urgency: (100 - value) / 100, x: ((destination.x + sway) / 100) * ecosystem.width, y: ((destination.y + Math.cos(now / 1000 + particle.phase * 9) * 1.3) / 100) * ecosystem.height };
 }
@@ -421,12 +449,70 @@ function updateEcosystem(now) {
   ecosystem.encounters = ecosystem.encounters.filter((encounter) => now - encounter.born < 1400);
 }
 
+function drawResourceSite(context, site, now, nightStrength) {
+  const x = (site.x / 100) * ecosystem.width;
+  const y = (site.y / 100) * ecosystem.height;
+  const color = needColors[site.need];
+  const pulse = 0.5 + Math.sin(now / 700 + x * .08 + y * .04) * 0.5;
+  const glow = context.createRadialGradient(x, y, 1, x, y, 30 + pulse * 7);
+  glow.addColorStop(0, color + "42");
+  glow.addColorStop(1, color + "00");
+  context.fillStyle = glow;
+  context.beginPath(); context.arc(x, y, 31 + pulse * 6, 0, Math.PI * 2); context.fill();
+
+  if (site.need === "food") {
+    context.strokeStyle = "rgba(187,221,113,.38)";
+    context.lineWidth = 1.2;
+    for (let row = -2; row <= 2; row += 1) {
+      context.beginPath();
+      context.moveTo(x - 11, y + row * 3);
+      context.quadraticCurveTo(x, y + row * 3 - 2, x + 11, y + row * 3);
+      context.stroke();
+    }
+    context.fillStyle = "rgba(218,187,95,.72)";
+    for (let grain = 0; grain < 8; grain += 1) {
+      context.beginPath(); context.ellipse(x - 10 + grain * 2.8, y - 5 + Math.sin(grain * 2) * 3, 1.1, 2, .4, 0, Math.PI * 2); context.fill();
+    }
+  } else if (site.need === "shelter") {
+    context.fillStyle = "rgba(82,63,38,.78)";
+    for (let log = 0; log < 4; log += 1) {
+      context.save(); context.translate(x - 8 + log * 5, y + (log % 2) * 3); context.rotate(.34); context.fillRect(-5, -1.6, 10, 3.2); context.restore();
+    }
+    context.fillStyle = "rgba(95,165,103,.58)";
+    for (let tree = 0; tree < 3; tree += 1) {
+      context.beginPath(); context.arc(x - 9 + tree * 9, y - 8 - (tree % 2) * 3, 4.2, 0, Math.PI * 2); context.fill();
+    }
+  } else if (site.need === "belonging") {
+    context.fillStyle = "rgba(75,52,35,.78)";
+    context.beginPath(); context.arc(x, y + 4, 7, 0, Math.PI * 2); context.fill();
+    context.fillStyle = "rgba(255,189,98," + (0.52 + nightStrength * .36) + ")";
+    context.beginPath(); context.arc(x, y, 3.5 + pulse, 0, Math.PI * 2); context.fill();
+    context.strokeStyle = "rgba(201,175,119,.65)";
+    context.lineWidth = 1.2;
+    for (let seat = 0; seat < 4; seat += 1) {
+      const angle = seat * Math.PI / 2 + .4;
+      context.beginPath(); context.arc(x + Math.cos(angle) * 10, y + Math.sin(angle) * 7, 2.5, 0, Math.PI * 2); context.stroke();
+    }
+  } else {
+    context.strokeStyle = "rgba(213,195,238,.67)";
+    context.lineWidth = 1.5;
+    for (let stone = 0; stone < 5; stone += 1) {
+      const angle = stone * Math.PI * 2 / 5;
+      context.save(); context.translate(x + Math.cos(angle) * 8, y + Math.sin(angle) * 6); context.rotate(angle); context.strokeRect(-1.8, -4, 3.6, 8); context.restore();
+    }
+    context.beginPath(); context.arc(x, y, 4 + pulse * 1.5, 0, Math.PI * 2); context.stroke();
+  }
+}
+
 function drawVillage(context, settlement, index, nightStrength) {
   const x = (settlement.x / 100) * ecosystem.width;
   const y = (settlement.y / 100) * ecosystem.height;
   const buildingCount = Math.max(2, Math.min(6, 2 + Math.floor(settlement.population / 260)));
   context.fillStyle = "rgba(0,0,0,.25)";
   context.beginPath(); context.ellipse(x, y + 8, 27, 10, 0, 0, Math.PI * 2); context.fill();
+  context.strokeStyle = "rgba(190,157,94,.24)";
+  context.lineWidth = 1;
+  context.beginPath(); context.ellipse(x, y + 3, 29, 13, 0, 0, Math.PI * 2); context.stroke();
   for (let building = 0; building < buildingCount; building += 1) {
     const offsetX = ((building % 3) - 1) * 11 + (Math.floor(building / 3) ? 7 : 0);
     const offsetY = (Math.floor(building / 3) - 0.5) * 11;
@@ -439,6 +525,14 @@ function drawVillage(context, settlement, index, nightStrength) {
     context.lineTo(x + offsetX, y + offsetY - 9 * scale);
     context.lineTo(x + offsetX + 7 * scale, y + offsetY - 1);
     context.closePath(); context.fill();
+    context.fillStyle = "rgba(36,25,18,.82)";
+    context.fillRect(x + offsetX - scale, y + offsetY + 2, 2 * scale, 4 * scale);
+    if (building % 2 === 0) {
+      context.fillStyle = "rgba(52,43,34,.82)";
+      context.fillRect(x + offsetX + 3 * scale, y + offsetY - 8 * scale, 1.6, 5.5 * scale);
+      context.fillStyle = "rgba(211,225,205,.14)";
+      context.beginPath(); context.arc(x + offsetX + 4 * scale, y + offsetY - 10 * scale, 2.7, 0, Math.PI * 2); context.fill();
+    }
     if (nightStrength > 0.22) {
       context.fillStyle = "rgba(255,210,116," + (0.35 + nightStrength * 0.55) + ")";
       context.fillRect(x + offsetX - scale, y + offsetY + 2, 2 * scale, 2 * scale);
@@ -452,11 +546,15 @@ function drawVillage(context, settlement, index, nightStrength) {
 function drawResidentSprite(context, particle) {
   const color = needColors[particle.activity];
   const size = 2.3 + particle.urgency * 1.5;
+  const stride = Math.sin((particle.x + particle.y) * .42 + particle.phase * 8) * size * .6;
   context.fillStyle = "rgba(0,0,0,.3)";
   context.beginPath(); context.ellipse(particle.x, particle.y + size * 1.15, size * 1.2, size * 0.43, 0, 0, Math.PI * 2); context.fill();
   context.strokeStyle = color;
   context.lineWidth = 1.35;
   context.beginPath(); context.moveTo(particle.x, particle.y - size * 0.45); context.lineTo(particle.x, particle.y + size * 0.9); context.stroke();
+  context.strokeStyle = "rgba(229,235,217,.5)";
+  context.lineWidth = 1;
+  context.beginPath(); context.moveTo(particle.x, particle.y + size * .72); context.lineTo(particle.x - stride, particle.y + size * 1.2); context.moveTo(particle.x, particle.y + size * .72); context.lineTo(particle.x + stride, particle.y + size * 1.2); context.stroke();
   context.fillStyle = "#f4d7a0";
   context.beginPath(); context.arc(particle.x, particle.y - size * 1.05, size * 0.52, 0, Math.PI * 2); context.fill();
   context.fillStyle = color;
@@ -509,15 +607,7 @@ function drawEcosystem(now) {
   context.fillStyle = dawnGlow;
   context.fillRect(0, 0, ecosystem.width, ecosystem.height);
 
-  fieldSites().forEach((site) => {
-    const x = (site.x / 100) * ecosystem.width;
-    const y = (site.y / 100) * ecosystem.height;
-    const glow = context.createRadialGradient(x, y, 1, x, y, 26);
-    glow.addColorStop(0, needColors[site.need] + "34");
-    glow.addColorStop(1, needColors[site.need] + "00");
-    context.fillStyle = glow;
-    context.beginPath(); context.arc(x, y, 26, 0, Math.PI * 2); context.fill();
-  });
+  fieldSites().forEach((site) => drawResourceSite(context, site, now, nightStrength));
 
   world.settlements.forEach((settlement, index) => drawVillage(context, settlement, index, nightStrength));
   ecosystem.wildlife.slice().sort((a, b) => a.y - b.y).forEach((animal) => drawWildlife(context, animal));
