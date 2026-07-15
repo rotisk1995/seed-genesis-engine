@@ -11,6 +11,7 @@ SEED is an AI-native genesis engine for emergent worlds. Give it an initial cond
 - Models distinct settlements, collective pressures, local stability, and an evolving chronicle.
 - Gives autonomous residents needs for food, shelter, belonging, and wonder; advancing a turn lets their responses alter the world without a creator decree.
 - Lets a creator issue a decree and observe a state-dependent consequence.
+- Surfaces a causal trace so each decree or autonomous action can be connected to the changing conditions it produces.
 - Uses GPT-5.6 for structured world genesis and narrative consequence when an API key is available; remains fully usable with its deterministic simulation fallback.
 
 ## Run locally

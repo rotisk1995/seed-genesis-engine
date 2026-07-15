@@ -15,6 +15,9 @@ const initialWorld = {
   pattern: "Memory commons",
   patternDetail: "Knowledge moves along the river more reliably than goods.",
   conditions: { water: 68, abundance: 61, cohesion: 52, mystery: 72 },
+  traces: [
+    { turn: 1, source: "Initial condition", action: "Memory gains material value", effect: "Knowledge begins moving through the valley as a shared resource." }
+  ],
   settlements: [
     { name: "Velis", biome: "Glasswater delta", trait: "River archivists who trade in recovered names.", population: 820, stability: 72, x: 31, y: 54, relation: "shares records with Orra" },
     { name: "Orra", biome: "Reed-crown floodplain", trait: "Boatwrights who believe a journey can change the past.", population: 510, stability: 62, x: 57, y: 33, relation: "depends on Velis for maps" },
@@ -105,6 +108,9 @@ function fallbackWorld(seed) {
     pattern: pick(["Mutual dependence", "Ritual economy", "Distributed memory", "Ecological covenant"], key),
     patternDetail: "A local adaptation is becoming a system-wide expectation.",
     conditions: { water: hasWater ? 76 : 52 + (key % 23), abundance: 49 + ((key >> 3) % 32), cohesion: 43 + ((key >> 5) % 38), mystery: 60 + ((key >> 9) % 31) },
+    traces: [
+      { turn: 1, source: "Initial condition", action: seed, effect: "Communities adapt differently, creating the first divergence." }
+    ],
     settlements,
     factions: [
       { name: "The Common Thread", goal: "Keep the new condition shared and legible.", influence: 61 },
@@ -141,6 +147,14 @@ function normaliseLiveWorld(data, seed) {
 function renderConditions() {
   const labels = { water: "water", abundance: "abundance", cohesion: "cohesion", mystery: "mystery" };
   $("#conditionList").innerHTML = Object.entries(world.conditions).map(([key, value]) => `<div class="condition-row"><span>${labels[key]}</span><i><b style="width:${value}%"></b></i><em>${value}</em></div>`).join("");
+}
+
+function addTrace(source, action, effect) {
+  world.traces = [...(world.traces || []), { turn: world.turn, source, action, effect }].slice(-4);
+}
+
+function renderTrace() {
+  $("#causalTrace").innerHTML = (world.traces || []).slice().reverse().map((trace) => '<div class="trace-row"><span class="trace-turn">T' + String(trace.turn).padStart(2, "0") + '</span><div><b>' + esc(trace.source) + '</b><p>' + esc(trace.action) + '</p><small>' + esc(trace.effect) + '</small></div></div>').join("");
 }
 
 function renderMap() {
@@ -217,7 +231,7 @@ function render() {
   $("#patternName").textContent = world.pattern;
   $("#patternDetail").textContent = world.patternDetail;
   $("#worldInsight").textContent = world.insight;
-  renderConditions(); renderMap(); renderInspector(); renderFactions(); renderAgents(); renderChronicle();
+  renderConditions(); renderTrace(); renderMap(); renderInspector(); renderFactions(); renderAgents(); renderChronicle();
 }
 
 function cycleAgents({ recordEvent = false } = {}) {
@@ -243,6 +257,7 @@ function cycleAgents({ recordEvent = false } = {}) {
   const report = reports.sort((a, b) => a.agent.needs[a.need] - b.agent.needs[b.need])[0];
   if (recordEvent && report) {
     const companion = world.agents.find((agent) => agent.name !== report.agent.name && agent.home !== report.agent.home) || world.agents[1];
+    addTrace(report.agent.name + " / " + report.need, report.outcome.verb, report.outcome.condition + " shifts " + (report.outcome.delta > 0 ? "+" : "") + report.outcome.delta + "; " + report.agent.home + " changes with it.");
     world.events.push({
       turn: world.turn,
       title: `${report.agent.name} changes the day`,
@@ -283,6 +298,8 @@ function evolveWorld(decree) {
   });
   world.factions = world.factions.map((faction, index) => ({ ...faction, influence: clamp(faction.influence + (index === 0 ? delta.cohesion / 3 : index === 1 ? delta.abundance / 4 : delta.mystery / 4), 8, 95) }));
   cycleAgents();
+  const conditionEffects = Object.entries(delta).filter(([, value]) => value).map(([key, value]) => key + " " + (value > 0 ? "+" : "") + value).join(" / ");
+  addTrace("Creator decree", decree, conditionEffects || "The world absorbs the force without a visible immediate shift.");
   const anchor = world.settlements[(world.turn + hash(decree)) % world.settlements.length];
   const outcomes = {
     conflict: { title: "The old agreement fractures", detail: `${anchor.name} interprets the decree as a claim against its autonomy. A routine exchange becomes a public argument, and the other settlements must decide which precedent to honor.`, pattern: "Contested legitimacy", color: "#e88676", icon: "×" },
