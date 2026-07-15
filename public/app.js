@@ -26,6 +26,13 @@ const initialWorld = {
     { name: "The Winter Ledger", goal: "Measure memory, scarcity, and debt.", influence: 54 },
     { name: "Rootbound Chorus", goal: "Let the valley’s living systems speak for themselves.", influence: 41 }
   ],
+  agents: [
+    { name: "Elara", role: "forager", home: "Velis", focus: "reads the river’s edible margins", needs: { food: 74, shelter: 63, belonging: 57, wonder: 84 } },
+    { name: "Torin", role: "carpenter", home: "Orra", focus: "repairs boats after listening to their grain", needs: { food: 65, shelter: 78, belonging: 46, wonder: 51 } },
+    { name: "Mira", role: "trader", home: "Mira", focus: "barters promises between settlements", needs: { food: 68, shelter: 59, belonging: 81, wonder: 62 } },
+    { name: "Lio", role: "storykeeper", home: "Velis", focus: "collects memories that no ledger will hold", needs: { food: 51, shelter: 52, belonging: 73, wonder: 88 } },
+    { name: "Arden", role: "pathfinder", home: "Thornwake", focus: "maps changes that arrive before sunrise", needs: { food: 77, shelter: 44, belonging: 58, wonder: 79 } }
+  ],
   events: [
     { turn: 1, title: "The first remembering", detail: "A child in Velis recites a shipwreck no living witness has seen. Three families claim the memory, and the river market closes to listen.", icon: "✦", color: "#a8eb93" },
     { turn: 1, title: "Reeds become ledgers", detail: "Orra begins knotting debts into reed bundles. The practice makes trade easier—and forgiveness more difficult.", icon: "⌁", color: "#78e4db" },
@@ -43,6 +50,22 @@ function hash(text) {
 
 function pick(items, value) {
   return items[value % items.length];
+}
+
+function makeAgents(settlements, key) {
+  const names = ["Elara", "Torin", "Mira", "Lio", "Arden", "Sana", "Vey", "Iri"];
+  const roles = ["forager", "carpenter", "trader", "storykeeper", "pathfinder", "mediator", "watcher", "gardener"];
+  const focuses = ["follows a pattern no one else believes", "repairs the shared tools", "trades what cannot be measured", "keeps memories from drifting apart", "searches for the next safe crossing", "turns arguments into rituals", "records small ecological changes", "grows food where it should not grow"];
+  return [0, 1, 2, 3, 4].map((index) => ({
+    name: pick(names, key + index * 11),
+    role: pick(roles, key + index * 3),
+    home: settlements[index % settlements.length].name,
+    focus: pick(focuses, key + index * 5),
+    needs: {
+      food: 42 + ((key >> (index + 1)) % 48), shelter: 42 + ((key >> (index + 4)) % 49),
+      belonging: 42 + ((key >> (index + 7)) % 49), wonder: 42 + ((key >> (index + 10)) % 49)
+    }
+  }));
 }
 
 function fallbackWorld(seed) {
@@ -78,6 +101,7 @@ function fallbackWorld(seed) {
       { name: "The Stewards of Before", goal: "Protect the agreements that existed before the change.", influence: 49 },
       { name: "The Unmapped", goal: "Follow the consequences beyond any settlement’s control.", influence: 38 }
     ],
+    agents: makeAgents(settlements, key),
     events: [
       { turn: 1, title: "A condition takes root", detail: `The world begins with one pressure: ${seed}`, icon: "✦", color: "#a8eb93" },
       { turn: 1, title: "The first adaptation", detail: `${settlements[0].name} changes a daily ritual to survive it. Other settlements cannot agree whether this is wisdom or theft.`, icon: "⌁", color: "#78e4db" },
@@ -98,6 +122,7 @@ function normaliseLiveWorld(data, seed) {
     patternDetail: data.insight,
     conditions: fallback.conditions,
     settlements: data.settlements.map((settlement, index) => ({ ...fallback.settlements[index % fallback.settlements.length], ...settlement, relation: fallback.settlements[index % fallback.settlements.length].relation })),
+    agents: Array.isArray(data.agents) ? data.agents.map((agent, index) => ({ ...fallback.agents[index % fallback.agents.length], ...agent, needs: fallback.agents[index % fallback.agents.length].needs })) : fallback.agents,
     events: data.events.map((event, index) => ({ ...event, turn: 1, icon: ["✦", "⌁", "◌", "↗"][index], color: palettes[index] }))
   };
 }
@@ -123,6 +148,18 @@ function renderMap() {
     node.addEventListener("click", () => { selectedIndex = index; render(); });
     map.append(node);
   });
+  world.agents.forEach((agent, index) => {
+    const homeIndex = Math.max(0, world.settlements.findIndex((settlement) => settlement.name === agent.home));
+    const home = world.settlements[homeIndex];
+    const node = document.createElement("button");
+    node.className = "agent-pin";
+    node.style.left = `${home.x + [-5, 5, -8, 8, 0][index % 5]}%`;
+    node.style.top = `${home.y + [-9, -7, 8, 9, 13][index % 5]}%`;
+    node.title = `${agent.name}, ${agent.role}`;
+    node.innerHTML = `<span>${esc(agent.name.slice(0, 1))}</span>`;
+    node.addEventListener("click", () => { selectedIndex = homeIndex; render(); });
+    map.append(node);
+  });
   $("#mapStatus").textContent = `${world.settlements.length} settlements / ${world.factions.length} pressures / ${world.turn} turns observed`;
 }
 
@@ -141,6 +178,22 @@ function renderFactions() {
   $("#factionList").innerHTML = world.factions.map((faction) => `<div class="faction"><div class="faction-top"><b>${esc(faction.name)}</b><em>${faction.influence}%</em></div><p>${esc(faction.goal)}</p><div class="influence"><i style="width:${faction.influence}%"></i></div></div>`).join("");
 }
 
+function weakestNeed(agent) {
+  return Object.entries(agent.needs).sort(([, a], [, b]) => a - b)[0];
+}
+
+function renderAgents() {
+  $("#agentList").innerHTML = world.agents.map((agent, index) => {
+    const [need, value] = weakestNeed(agent);
+    return `<button class="agent-row" data-agent="${index}"><span class="agent-monogram">${esc(agent.name.slice(0, 1))}</span><span class="agent-copy"><b>${esc(agent.name)} <em>${esc(agent.role)}</em></b><small>${esc(agent.focus)}</small><i><u style="width:${value}%"></u></i></span><span class="agent-need">${esc(need)}<strong>${value}</strong></span></button>`;
+  }).join("");
+  $$(".agent-row").forEach((row) => row.addEventListener("click", () => {
+    const agent = world.agents[Number(row.dataset.agent)];
+    selectedIndex = Math.max(0, world.settlements.findIndex((settlement) => settlement.name === agent.home));
+    render();
+  }));
+}
+
 function renderChronicle() {
   $("#chronicle").innerHTML = world.events.slice(-6).reverse().map((event) => `<article class="event" style="--event-color:${event.color || "#a8eb93"}"><span>${event.icon || "✦"}</span><div class="event-meta">TURN ${String(event.turn).padStart(2, "0")}</div><h3>${esc(event.title)}</h3><p>${esc(event.detail)}</p></article>`).join("");
 }
@@ -153,7 +206,52 @@ function render() {
   $("#patternName").textContent = world.pattern;
   $("#patternDetail").textContent = world.patternDetail;
   $("#worldInsight").textContent = world.insight;
-  renderConditions(); renderMap(); renderInspector(); renderFactions(); renderChronicle();
+  renderConditions(); renderMap(); renderInspector(); renderFactions(); renderAgents(); renderChronicle();
+}
+
+function cycleAgents({ recordEvent = false } = {}) {
+  const outcomes = {
+    food: { verb: "forages beyond the familiar paths", condition: "water", delta: -2, recovery: 19, pattern: "Foraging frontier" },
+    shelter: { verb: "repairs a place others had stopped noticing", condition: "abundance", delta: -1, recovery: 17, pattern: "Mutual maintenance" },
+    belonging: { verb: "invites an unlikely neighbor into a shared task", condition: "cohesion", delta: 4, recovery: 18, pattern: "Social repair" },
+    wonder: { verb: "follows an anomaly no ledger can explain", condition: "mystery", delta: 5, recovery: 16, pattern: "Curiosity network" }
+  };
+  const reports = [];
+  world.agents = world.agents.map((agent, index) => {
+    const needs = Object.fromEntries(Object.entries(agent.needs).map(([key, value]) => [key, clamp(value - (key === "food" ? 8 : 5), 8, 100)]));
+    const next = { ...agent, needs };
+    const [need, value] = weakestNeed(next);
+    const outcome = outcomes[need];
+    next.needs[need] = clamp(value + outcome.recovery);
+    world.conditions[outcome.condition] = clamp(world.conditions[outcome.condition] + outcome.delta);
+    const home = world.settlements.find((settlement) => settlement.name === next.home);
+    if (home) home.stability = clamp(home.stability + (need === "belonging" ? 3 : need === "food" ? -1 : 1), 12, 96);
+    reports.push({ agent: next, need, outcome });
+    return next;
+  });
+  const report = reports.sort((a, b) => a.agent.needs[a.need] - b.agent.needs[b.need])[0];
+  if (recordEvent && report) {
+    const companion = world.agents.find((agent) => agent.name !== report.agent.name && agent.home !== report.agent.home) || world.agents[1];
+    world.events.push({
+      turn: world.turn,
+      title: `${report.agent.name} changes the day`,
+      detail: `${report.agent.name}, a ${report.agent.role} of ${report.agent.home}, ${report.outcome.verb}. ${companion.name} notices the effect elsewhere, turning a private need into a shared condition.`,
+      icon: "◉", color: "#78e4db"
+    });
+    world.pattern = report.outcome.pattern;
+    world.patternDetail = `${report.agent.name} acted on ${report.need}; the effect reached beyond ${report.agent.home}.`;
+  }
+  return report;
+}
+
+function advanceTurn() {
+  if (busy) return;
+  world.turn += 1;
+  world.conditions.mystery = clamp(world.conditions.mystery + (world.turn % 2 ? 2 : -1));
+  world.conditions.abundance = clamp(world.conditions.abundance + (world.conditions.water > 55 ? 2 : -3));
+  cycleAgents({ recordEvent: true });
+  render();
+  $("#engineNote").innerHTML = "<span class=\"live-dot\"></span> agents acted on their needs <b>•</b> the world advanced without a decree";
 }
 
 function evolveWorld(decree) {
@@ -173,6 +271,7 @@ function evolveWorld(decree) {
     return { ...settlement, stability: clamp(settlement.stability + localShift, 12, 96), population: Math.max(40, settlement.population + Math.round((delta.abundance + delta.cohesion) / 4)) };
   });
   world.factions = world.factions.map((faction, index) => ({ ...faction, influence: clamp(faction.influence + (index === 0 ? delta.cohesion / 3 : index === 1 ? delta.abundance / 4 : delta.mystery / 4), 8, 95) }));
+  cycleAgents();
   const anchor = world.settlements[(world.turn + hash(decree)) % world.settlements.length];
   const outcomes = {
     conflict: { title: "The old agreement fractures", detail: `${anchor.name} interprets the decree as a claim against its autonomy. A routine exchange becomes a public argument, and the other settlements must decide which precedent to honor.`, pattern: "Contested legitimacy", color: "#e88676", icon: "×" },
@@ -233,6 +332,7 @@ $("#genesisButton").addEventListener("click", beginGenesis);
 $("#seedInput").addEventListener("keydown", (event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") beginGenesis(); });
 $("#decreeButton").addEventListener("click", issueDecree);
 $("#decreeInput").addEventListener("keydown", (event) => { if (event.key === "Enter") issueDecree(); });
+$("#advanceButton").addEventListener("click", advanceTurn);
 $("#resetButton").addEventListener("click", () => { world = structuredClone(initialWorld); selectedIndex = 0; $("#seedInput").value = world.seed; render(); });
 $$("[data-seed]").forEach((button) => button.addEventListener("click", () => { $("#seedInput").value = button.dataset.seed; beginGenesis(); }));
 $$("[data-decree]").forEach((button) => button.addEventListener("click", () => { $("#decreeInput").value = button.dataset.decree; issueDecree(); }));
