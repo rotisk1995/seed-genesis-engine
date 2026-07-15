@@ -158,7 +158,7 @@ function renderTrace() {
 }
 
 const needColors = { food: "#a8eb93", shelter: "#78e4db", belonging: "#c4a4f2", wonder: "#e3bc76" };
-const ecosystem = { canvas: null, context: null, width: 0, height: 0, particles: [], encounters: [], exchanges: 0, lastCommittedExchanges: 0, lastFrame: 0, lastReadout: 0, running: false };
+const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, particles: [], encounters: [], exchanges: 0, lastCommittedExchanges: 0, lastFrame: 0, lastReadout: 0, running: false };
 
 function fieldSites() {
   return [
@@ -167,6 +167,78 @@ function fieldSites() {
     { need: "wonder", x: 51, y: 18 + world.conditions.mystery * 0.05 },
     { need: "wonder", x: 79, y: 72 }
   ];
+}
+
+function seededRandom(value) {
+  let state = value >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+function rebuildTerrainLayer() {
+  if (!ecosystem.width || !ecosystem.height) return;
+  const density = Math.min(window.devicePixelRatio || 1, 2);
+  const terrain = document.createElement("canvas");
+  terrain.width = Math.round(ecosystem.width * density);
+  terrain.height = Math.round(ecosystem.height * density);
+  const context = terrain.getContext("2d");
+  context.setTransform(density, 0, 0, density, 0, 0);
+  const random = seededRandom(hash(world.seed + ":" + world.name));
+  const width = ecosystem.width;
+  const height = ecosystem.height;
+
+  for (let layer = 0; layer < 10; layer += 1) {
+    context.fillStyle = layer % 2 ? "rgba(125,174,113,.042)" : "rgba(44,112,97,.052)";
+    context.beginPath();
+    context.ellipse(random() * width, random() * height, width * (0.13 + random() * 0.18), height * (0.05 + random() * 0.09), random() * Math.PI, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  context.lineCap = "round";
+  for (let contour = 0; contour < 13; contour += 1) {
+    const y = height * (0.05 + contour * 0.075) + (random() - 0.5) * 38;
+    context.strokeStyle = "rgba(168,235,147," + (0.045 + random() * 0.045) + ")";
+    context.lineWidth = 0.7 + random() * 0.7;
+    context.beginPath();
+    context.moveTo(-20, y);
+    context.bezierCurveTo(width * 0.22, y - 55 + random() * 110, width * 0.66, y + (random() - 0.5) * 100, width + 20, y + (random() - 0.5) * 85);
+    context.stroke();
+  }
+
+  context.strokeStyle = "rgba(87,209,207,.18)";
+  context.lineWidth = 21;
+  context.beginPath();
+  context.moveTo(width * 0.02, height * 0.2);
+  context.bezierCurveTo(width * 0.18, height * 0.35, width * 0.3, height * 0.14, width * 0.48, height * 0.47);
+  context.bezierCurveTo(width * 0.61, height * 0.72, width * 0.76, height * 0.58, width * 1.02, height * 0.86);
+  context.stroke();
+  context.strokeStyle = "rgba(187,255,239,.23)";
+  context.lineWidth = 3.5;
+  context.stroke();
+
+  for (let tree = 0; tree < 165; tree += 1) {
+    const x = random() * width;
+    const y = random() * height;
+    const radius = 2 + random() * 6;
+    context.fillStyle = tree % 3 ? "rgba(61,125,82,.16)" : "rgba(120,181,91,.12)";
+    context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill();
+  }
+
+  context.setLineDash([3, 7]);
+  context.strokeStyle = "rgba(232,202,126,.2)";
+  context.lineWidth = 1.1;
+  world.settlements.forEach((settlement, index) => {
+    const next = world.settlements[(index + 1) % world.settlements.length];
+    context.beginPath();
+    context.moveTo((settlement.x / 100) * width, (settlement.y / 100) * height);
+    context.quadraticCurveTo(((settlement.x + next.x) / 200) * width, ((settlement.y + next.y) / 200) * height - 18, (next.x / 100) * width, (next.y / 100) * height);
+    context.stroke();
+  });
+  context.setLineDash([]);
+
+  ecosystem.terrain = terrain;
 }
 
 function updateEcosystemReadout() {
@@ -188,6 +260,7 @@ function resizeEcosystem() {
   ecosystem.canvas.width = Math.round(ecosystem.width * density);
   ecosystem.canvas.height = Math.round(ecosystem.height * density);
   ecosystem.context.setTransform(density, 0, 0, density, 0, 0);
+  rebuildTerrainLayer();
 }
 
 function resetEcosystem() {
@@ -295,6 +368,13 @@ function drawEcosystem(now) {
   const context = ecosystem.context;
   if (!context) return;
   context.clearRect(0, 0, ecosystem.width, ecosystem.height);
+  if (ecosystem.terrain) context.drawImage(ecosystem.terrain, 0, 0, ecosystem.terrain.width, ecosystem.terrain.height, 0, 0, ecosystem.width, ecosystem.height);
+  const lightX = ecosystem.width * (0.52 + Math.sin(now / 12000) * 0.11);
+  const light = context.createRadialGradient(lightX, ecosystem.height * 0.28, 8, lightX, ecosystem.height * 0.28, ecosystem.width * 0.42);
+  light.addColorStop(0, "rgba(255,235,180,.09)");
+  light.addColorStop(1, "rgba(255,235,180,0)");
+  context.fillStyle = light;
+  context.fillRect(0, 0, ecosystem.width, ecosystem.height);
   fieldSites().forEach((site) => {
     const x = (site.x / 100) * ecosystem.width;
     const y = (site.y / 100) * ecosystem.height;
