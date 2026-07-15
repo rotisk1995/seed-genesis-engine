@@ -1,6 +1,6 @@
 # SEED — A Genesis Engine for Emergent Worlds
 
-SEED is an AI-native genesis engine for emergent worlds. Give it an initial condition, introduce forces, and watch societies, resources, relationships, and history co-evolve through causal simulation.
+SEED is an AI-native genesis engine for emergent worlds. It gives autonomous life simple rules, then lets societies, resources, relationships, and history co-evolve through causal simulation. **Emergent Village** is its first proof world.
 
 > SEED does not script a story—it creates conditions for stories to emerge.
 
@@ -10,6 +10,7 @@ SEED is an AI-native genesis engine for emergent worlds. Give it an initial cond
 - Simulates world conditions: water, abundance, cohesion, and mystery.
 - Models distinct settlements, collective pressures, local stability, and an evolving chronicle.
 - Gives autonomous residents needs for food, shelter, belonging, and wonder; advancing a turn lets their responses alter the world without a creator decree.
+- Visualizes a live resident field: independent particles pursue needs, remember cross-settlement encounters, form local ties, and feed those exchanges into the next simulation turn.
 - Lets a creator issue a decree and observe a state-dependent consequence.
 - Surfaces a causal trace so each decree or autonomous action can be connected to the changing conditions it produces.
 - Uses GPT-5.6 for structured world genesis and narrative consequence when an API key is available; remains fully usable with its deterministic simulation fallback.
@@ -52,6 +53,8 @@ creator decree → condition deltas → settlement/faction changes → chronicle
 ```
 
 The deterministic simulation owns the truth of the world state. The model enriches the initial world and explains its consequences; it does not replace the system’s causal logic.
+
+The implementation roadmap and official requirements are documented in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 
 ## OpenAI Build Week
 

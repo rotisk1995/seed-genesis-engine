@@ -157,6 +157,226 @@ function renderTrace() {
   $("#causalTrace").innerHTML = (world.traces || []).slice().reverse().map((trace) => '<div class="trace-row"><span class="trace-turn">T' + String(trace.turn).padStart(2, "0") + '</span><div><b>' + esc(trace.source) + '</b><p>' + esc(trace.action) + '</p><small>' + esc(trace.effect) + '</small></div></div>').join("");
 }
 
+const needColors = { food: "#a8eb93", shelter: "#78e4db", belonging: "#c4a4f2", wonder: "#e3bc76" };
+const ecosystem = { canvas: null, context: null, width: 0, height: 0, particles: [], encounters: [], exchanges: 0, lastCommittedExchanges: 0, lastFrame: 0, lastReadout: 0, running: false };
+
+function fieldSites() {
+  return [
+    { need: "food", x: 18 + world.conditions.water * 0.08, y: 57 },
+    { need: "food", x: 72, y: 31 + (100 - world.conditions.water) * 0.06 },
+    { need: "wonder", x: 51, y: 18 + world.conditions.mystery * 0.05 },
+    { need: "wonder", x: 79, y: 72 }
+  ];
+}
+
+function updateEcosystemReadout() {
+  const status = $("#mapStatus");
+  if (!status) return;
+  if (!ecosystem.particles.length) {
+    status.textContent = world.settlements.length + " settlements / " + world.factions.length + " pressures / " + world.turn + " turns observed";
+    return;
+  }
+  status.textContent = ecosystem.particles.length + " residents / " + ecosystem.exchanges + " exchanges / " + world.turn + " turns observed";
+}
+
+function resizeEcosystem() {
+  if (!ecosystem.canvas || !ecosystem.context) return;
+  const bounds = ecosystem.canvas.getBoundingClientRect();
+  const density = Math.min(window.devicePixelRatio || 1, 2);
+  ecosystem.width = Math.max(1, bounds.width);
+  ecosystem.height = Math.max(1, bounds.height);
+  ecosystem.canvas.width = Math.round(ecosystem.width * density);
+  ecosystem.canvas.height = Math.round(ecosystem.height * density);
+  ecosystem.context.setTransform(density, 0, 0, density, 0, 0);
+}
+
+function resetEcosystem() {
+  if (!ecosystem.canvas || !world.settlements.length) return;
+  resizeEcosystem();
+  const population = world.settlements.reduce((sum, settlement) => sum + settlement.population, 0);
+  const residentCount = Math.min(72, Math.max(48, Math.round(population / 36)));
+  ecosystem.particles = Array.from({ length: residentCount }, (_, index) => {
+    const agentIndex = index % Math.max(1, world.agents.length);
+    const agent = world.agents[agentIndex] || {};
+    const namedHome = world.settlements.findIndex((settlement) => settlement.name === agent.home);
+    const homeIndex = namedHome >= 0 ? namedHome : index % world.settlements.length;
+    const home = world.settlements[homeIndex];
+    const seed = hash(world.seed + ":" + index);
+    const angle = (seed % 628) / 100;
+    const radius = 6 + (seed % 160) / 14;
+    const x = (home.x / 100) * ecosystem.width + Math.cos(angle) * radius;
+    const y = (home.y / 100) * ecosystem.height + Math.sin(angle) * radius;
+    const baseNeeds = agent.needs || { food: 60, shelter: 60, belonging: 60, wonder: 60 };
+    const needs = Object.fromEntries(Object.entries(baseNeeds).map(([need, value], needIndex) => [need, clamp(value + ((seed >> (needIndex * 3)) % 19) - 9, 8, 100)]));
+    return { seed, agentIndex, homeIndex, phase: (seed % 12) / 12, x, y, vx: 0, vy: 0, tail: [{ x, y }], needs, memories: 0, ties: {}, activity: "belonging", urgency: 0.5, lastNeedTick: performance.now(), lastEncounter: performance.now() + (seed % 1100) };
+  });
+  ecosystem.encounters = [];
+  ecosystem.exchanges = 0;
+  ecosystem.lastCommittedExchanges = 0;
+  ecosystem.lastReadout = 0;
+  updateEcosystemReadout();
+}
+
+function particleTarget(particle, now) {
+  const [need, value] = Object.entries(particle.needs).sort(([, a], [, b]) => a - b)[0];
+  const home = world.settlements[particle.homeIndex % world.settlements.length];
+  const neighbour = world.settlements[(particle.homeIndex + 1 + (particle.seed % Math.max(1, world.settlements.length - 1))) % world.settlements.length];
+  const travelling = Math.floor(now / 3800 + particle.phase) % 2 === 0;
+  const sites = fieldSites();
+  let destination = home;
+  if (need === "food") destination = travelling ? sites[particle.seed % 2] : home;
+  if (need === "belonging") destination = travelling ? { x: (home.x + neighbour.x) / 2, y: (home.y + neighbour.y) / 2 } : neighbour;
+  if (need === "wonder") destination = sites[2 + (particle.seed % 2)];
+  const sway = Math.sin(now / 850 + particle.phase * 7) * 1.6;
+  return { need, urgency: (100 - value) / 100, x: ((destination.x + sway) / 100) * ecosystem.width, y: ((destination.y + Math.cos(now / 1000 + particle.phase * 9) * 1.3) / 100) * ecosystem.height };
+}
+
+function updateEcosystem(now) {
+  const dt = Math.min(2, Math.max(0.4, (now - (ecosystem.lastFrame || now)) / 16.67));
+  ecosystem.lastFrame = now;
+  ecosystem.particles.forEach((particle) => {
+    const elapsed = Math.max(0, (now - particle.lastNeedTick) / 1000);
+    if (elapsed > 0.65) {
+      particle.needs.food = Math.max(8, particle.needs.food - elapsed * 0.7);
+      particle.needs.shelter = Math.max(8, particle.needs.shelter - elapsed * 0.24);
+      particle.needs.belonging = Math.max(8, particle.needs.belonging - elapsed * 0.34);
+      particle.needs.wonder = Math.max(8, particle.needs.wonder - elapsed * 0.16);
+      particle.lastNeedTick = now;
+    }
+    const target = particleTarget(particle, now);
+    const dx = target.x - particle.x;
+    const dy = target.y - particle.y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    const force = 0.018 + target.urgency * 0.042;
+    particle.vx = (particle.vx + (dx / distance) * force * dt) * 0.91;
+    particle.vy = (particle.vy + (dy / distance) * force * dt) * 0.91;
+    particle.x = Math.max(8, Math.min(ecosystem.width - 8, particle.x + particle.vx * dt));
+    particle.y = Math.max(8, Math.min(ecosystem.height - 8, particle.y + particle.vy * dt));
+    particle.activity = target.need;
+    particle.urgency = target.urgency;
+    if (distance < 14) {
+      particle.needs[target.need] = Math.min(100, particle.needs[target.need] + (target.need === "belonging" ? 0.75 : 0.52) * dt);
+      if (target.need === "wonder") particle.memories += 0.01 * dt;
+    }
+    const previous = particle.tail.at(-1);
+    if (!previous || Math.hypot(previous.x - particle.x, previous.y - particle.y) > 2.4) particle.tail.push({ x: particle.x, y: particle.y });
+    if (particle.tail.length > 9) particle.tail.shift();
+  });
+  let newEncounters = 0;
+  for (let first = 0; first < ecosystem.particles.length; first += 1) {
+    for (let second = first + 1; second < ecosystem.particles.length; second += 1) {
+      const a = ecosystem.particles[first];
+      const b = ecosystem.particles[second];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance < 18 && distance > 0.1) {
+        const repel = ((18 - distance) / 18) * 0.022 * dt;
+        a.vx -= (dx / distance) * repel; a.vy -= (dy / distance) * repel;
+        b.vx += (dx / distance) * repel; b.vy += (dy / distance) * repel;
+      }
+      if (newEncounters < 2 && distance < 9 && a.homeIndex !== b.homeIndex && now - a.lastEncounter > 1000 && now - b.lastEncounter > 1000) {
+        const color = a.activity === b.activity ? needColors[a.activity] : needColors.belonging;
+        ecosystem.encounters.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, born: now, color });
+        ecosystem.exchanges += 1;
+        a.memories += 1; b.memories += 1;
+        a.needs.belonging = Math.min(100, a.needs.belonging + 14);
+        b.needs.belonging = Math.min(100, b.needs.belonging + 14);
+        a.ties[b.homeIndex] = (a.ties[b.homeIndex] || 0) + 1;
+        b.ties[a.homeIndex] = (b.ties[a.homeIndex] || 0) + 1;
+        a.lastEncounter = now; b.lastEncounter = now; newEncounters += 1;
+      }
+    }
+  }
+  ecosystem.encounters = ecosystem.encounters.filter((encounter) => now - encounter.born < 1400);
+}
+
+function drawEcosystem(now) {
+  const context = ecosystem.context;
+  if (!context) return;
+  context.clearRect(0, 0, ecosystem.width, ecosystem.height);
+  fieldSites().forEach((site) => {
+    const x = (site.x / 100) * ecosystem.width;
+    const y = (site.y / 100) * ecosystem.height;
+    const glow = context.createRadialGradient(x, y, 1, x, y, 23);
+    glow.addColorStop(0, needColors[site.need] + "26");
+    glow.addColorStop(1, needColors[site.need] + "00");
+    context.fillStyle = glow;
+    context.beginPath(); context.arc(x, y, 23, 0, Math.PI * 2); context.fill();
+  });
+  ecosystem.particles.forEach((particle) => {
+    const color = needColors[particle.activity];
+    if (particle.tail.length > 1) {
+      context.beginPath();
+      particle.tail.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+      context.strokeStyle = color + "32";
+      context.lineWidth = 1;
+      context.stroke();
+    }
+  });
+  ecosystem.encounters.forEach((encounter) => {
+    const life = 1 - (now - encounter.born) / 1400;
+    context.globalAlpha = Math.max(0, life);
+    context.strokeStyle = encounter.color;
+    context.lineWidth = 1;
+    context.beginPath(); context.arc(encounter.x, encounter.y, 5 + (1 - life) * 17, 0, Math.PI * 2); context.stroke();
+  });
+  context.globalAlpha = 1;
+  ecosystem.particles.forEach((particle) => {
+    const color = needColors[particle.activity];
+    context.fillStyle = color;
+    context.globalAlpha = 0.52 + particle.urgency * 0.45;
+    context.shadowColor = color;
+    context.shadowBlur = 6;
+    context.beginPath(); context.arc(particle.x, particle.y, 1.65 + particle.urgency * 1.2, 0, Math.PI * 2); context.fill();
+  });
+  context.globalAlpha = 1;
+  context.shadowBlur = 0;
+  if (now - ecosystem.lastReadout > 550) {
+    ecosystem.lastReadout = now;
+    updateEcosystemReadout();
+  }
+}
+
+function commitEcosystemTurn() {
+  if (!ecosystem.particles.length) return;
+  world.agents = world.agents.map((agent, agentIndex) => {
+    const cohort = ecosystem.particles.filter((particle) => particle.agentIndex === agentIndex);
+    if (!cohort.length) return agent;
+    const needs = Object.fromEntries(Object.keys(agent.needs).map((need) => [need, clamp(cohort.reduce((sum, particle) => sum + particle.needs[need], 0) / cohort.length)]));
+    return { ...agent, needs };
+  });
+  const recentExchanges = ecosystem.exchanges - ecosystem.lastCommittedExchanges;
+  if (recentExchanges > 0) {
+    const cohesionGain = Math.min(4, Math.max(1, Math.floor(recentExchanges / 2)));
+    world.conditions.cohesion = clamp(world.conditions.cohesion + cohesionGain);
+    addTrace("Resident exchanges", recentExchanges + " local encounters carried memory between settlements.", "Cohesion +" + cohesionGain + " before the next collective response.");
+  }
+  ecosystem.lastCommittedExchanges = ecosystem.exchanges;
+}
+
+function animateEcosystem(now) {
+  if (!ecosystem.running) return;
+  updateEcosystem(now);
+  drawEcosystem(now);
+  requestAnimationFrame(animateEcosystem);
+}
+
+function initialiseEcosystem() {
+  const canvas = $("#ecosystemCanvas");
+  if (!canvas || ecosystem.canvas === canvas) return;
+  ecosystem.canvas = canvas;
+  ecosystem.context = canvas.getContext("2d");
+  window.addEventListener("resize", resizeEcosystem);
+  resetEcosystem();
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    drawEcosystem(performance.now());
+    return;
+  }
+  ecosystem.running = true;
+  requestAnimationFrame(animateEcosystem);
+}
+
 function renderMap() {
   const map = $("#worldMap");
   map.querySelectorAll(".settlement").forEach((node) => node.remove());
@@ -173,19 +393,7 @@ function renderMap() {
     node.addEventListener("click", () => { selectedIndex = index; render(); });
     map.append(node);
   });
-  world.agents.forEach((agent, index) => {
-    const homeIndex = Math.max(0, world.settlements.findIndex((settlement) => settlement.name === agent.home));
-    const home = world.settlements[homeIndex];
-    const node = document.createElement("button");
-    node.className = "agent-pin";
-    node.style.left = `${home.x + [-5, 5, -8, 8, 0][index % 5]}%`;
-    node.style.top = `${home.y + [-9, -7, 8, 9, 13][index % 5]}%`;
-    node.title = `${agent.name}, ${agent.role}`;
-    node.innerHTML = `<span>${esc(agent.name.slice(0, 1))}</span>`;
-    node.addEventListener("click", () => { selectedIndex = homeIndex; render(); });
-    map.append(node);
-  });
-  $("#mapStatus").textContent = `${world.settlements.length} settlements / ${world.factions.length} pressures / ${world.turn} turns observed`;
+  updateEcosystemReadout();
 }
 
 function renderInspector() {
@@ -273,6 +481,7 @@ function cycleAgents({ recordEvent = false } = {}) {
 function advanceTurn() {
   if (busy) return;
   world.turn += 1;
+  commitEcosystemTurn();
   world.conditions.mystery = clamp(world.conditions.mystery + (world.turn % 2 ? 2 : -1));
   world.conditions.abundance = clamp(world.conditions.abundance + (world.conditions.water > 55 ? 2 : -3));
   cycleAgents({ recordEvent: true });
@@ -291,6 +500,7 @@ function evolveWorld(decree) {
   if (!Object.values(delta).some(Boolean)) { delta.mystery += 8; delta.cohesion += 2; }
   Object.entries(delta).forEach(([key, value]) => { world.conditions[key] = clamp(world.conditions[key] + value); });
   world.turn += 1;
+  commitEcosystemTurn();
   const pressure = world.conditions.cohesion < 38 ? "conflict" : world.conditions.water < 36 ? "scarcity" : world.conditions.abundance > 78 ? "prosperity" : world.conditions.mystery > 78 ? "discovery" : "adaptation";
   world.settlements = world.settlements.map((settlement, index) => {
     const localShift = (index % 2 ? delta.mystery : delta.abundance) / 3 - Math.max(0, -delta.cohesion) / 2;
@@ -326,10 +536,11 @@ async function beginGenesis() {
     const response = await fetch("/api/genesis", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ seed }) });
     const data = await response.json();
     world = data.mode === "live" ? normaliseLiveWorld(data.world, seed) : fallbackWorld(seed);
+    resetEcosystem();
     $("#engineNote").innerHTML = data.mode === "live" ? "<span class=\"live-dot\"></span> GPT‑5.6 shaped the first conditions <b>•</b> deterministic core active" : "<span class=\"live-dot\"></span> deterministic genesis active <b>•</b> add an API key for GPT‑5.6 narration";
     selectedIndex = 0; render();
   } catch {
-    world = fallbackWorld(seed); selectedIndex = 0; render();
+    world = fallbackWorld(seed); resetEcosystem(); selectedIndex = 0; render();
     $("#engineNote").textContent = "Local genesis complete. The model layer is unavailable, so SEED is running in deterministic mode.";
   } finally {
     busy = false; $("#genesisButton").innerHTML = "<span>Begin genesis</span><i>↗</i>";
@@ -361,8 +572,9 @@ $("#seedInput").addEventListener("keydown", (event) => { if ((event.ctrlKey || e
 $("#decreeButton").addEventListener("click", issueDecree);
 $("#decreeInput").addEventListener("keydown", (event) => { if (event.key === "Enter") issueDecree(); });
 $("#advanceButton").addEventListener("click", advanceTurn);
-$("#resetButton").addEventListener("click", () => { world = structuredClone(initialWorld); selectedIndex = 0; $("#seedInput").value = world.seed; render(); });
+$("#resetButton").addEventListener("click", () => { world = structuredClone(initialWorld); resetEcosystem(); selectedIndex = 0; $("#seedInput").value = world.seed; render(); });
 $$("[data-seed]").forEach((button) => button.addEventListener("click", () => { $("#seedInput").value = button.dataset.seed; beginGenesis(); }));
 $$("[data-decree]").forEach((button) => button.addEventListener("click", () => { $("#decreeInput").value = button.dataset.decree; issueDecree(); }));
 
+initialiseEcosystem();
 render();
