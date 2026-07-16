@@ -31,9 +31,10 @@ The current demonstration prioritizes an inspectable causal loop:
 1. Residents move in real time based on independent food, shelter, belonging, and curiosity needs.
 2. Residents remember encounters and form local cross-settlement ties.
 3. Resource sites and shared destinations create visible flows, trails, and encounter rings.
-4. Food and timber are gathered at resource sites, physically carried home, and accumulated as local stores; delivered timber produces a visible shelter project.
-5. Advancing a world turn aggregates resident needs, deliveries, construction, and local exchanges into agent state, abundance, cohesion, chronicle entries, and larger patterns.
-6. Creator decrees change the conditions that residents subsequently experience.
+4. Food and timber are finite, regenerating local sources. Residents begin with partial site knowledge, discover locations through movement, and exchange routes during encounters before gathering and carrying resources home.
+5. Local stores, visible site depletion, and delivered timber produce a shelter project; no building appears from a preset event.
+6. Advancing a world turn aggregates resident needs, deliveries, construction, and local exchanges into agent state, abundance, cohesion, chronicle entries, and larger patterns.
+7. Creator decrees change the conditions that residents subsequently experience.
 
 ## Cinematic observation
 

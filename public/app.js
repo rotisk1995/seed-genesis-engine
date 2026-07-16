@@ -158,18 +158,35 @@ function renderTrace() {
 }
 
 const needColors = { food: "#a8eb93", shelter: "#78e4db", belonging: "#c4a4f2", wonder: "#e3bc76" };
-const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, particles: [], wildlife: [], encounters: [], exchanges: 0, deliveries: 0, settlementWorks: [], lastCommittedExchanges: 0, lastCommittedDeliveries: 0, lastCommittedConstruction: 0, lastFrame: 0, lastReadout: 0, running: false, reducedMotion: false, camera: { x: 0, y: 0, zoom: 1.16, focus: "" } };
+const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, particles: [], wildlife: [], resources: [], encounters: [], exchanges: 0, deliveries: 0, settlementWorks: [], events: [], lastEventAt: 0, lastCommittedExchanges: 0, lastCommittedDeliveries: 0, lastCommittedConstruction: 0, lastFrame: 0, lastReadout: 0, running: false, reducedMotion: false, camera: { x: 0, y: 0, zoom: 1.16, focus: "" } };
 let cinematic = null;
 const useCinematicWebGL = new URLSearchParams(window.location.search).get("renderer") === "webgl";
 
+function resourceById(id) {
+  return ecosystem.resources.find((site) => site.id === id);
+}
+
+function resourcePosition(site) {
+  return { x: (site.x / 100) * ecosystem.width, y: (site.y / 100) * ecosystem.height };
+}
+
+function reportLiveEvent(text, now = performance.now(), force = false) {
+  if (!force && now - ecosystem.lastEventAt < 520) return;
+  ecosystem.lastEventAt = now;
+  ecosystem.events.push({ at: now, text });
+  if (ecosystem.events.length > 8) ecosystem.events.shift();
+  const readout = $("#liveEvent");
+  if (readout) readout.textContent = text;
+}
+
 function fieldSites() {
   return [
-    { need: "food", x: 18 + world.conditions.water * 0.08, y: 57, label: "reed fields" },
-    { need: "food", x: 72, y: 31 + (100 - world.conditions.water) * 0.06, label: "orchard" },
-    { need: "shelter", x: 29, y: 24, label: "timber stand" },
-    { need: "belonging", x: 62, y: 56, label: "shared hearth" },
-    { need: "wonder", x: 51, y: 18 + world.conditions.mystery * 0.05, label: "standing stones" },
-    { need: "wonder", x: 79, y: 72, label: "old observatory" }
+    { id: "reed-fields", need: "food", x: 18 + world.conditions.water * 0.08, y: 57, label: "reed fields", capacity: 26, regen: .012 },
+    { id: "orchard", need: "food", x: 72, y: 31 + (100 - world.conditions.water) * 0.06, label: "orchard", capacity: 18, regen: .008 },
+    { id: "timber-stand", need: "shelter", x: 29, y: 24, label: "timber stand", capacity: 22, regen: .006 },
+    { id: "shared-hearth", need: "belonging", x: 62, y: 56, label: "shared hearth", capacity: 1, regen: 0 },
+    { id: "standing-stones", need: "wonder", x: 51, y: 18 + world.conditions.mystery * 0.05, label: "standing stones", capacity: 1, regen: 0 },
+    { id: "old-observatory", need: "wonder", x: 79, y: 72, label: "old observatory", capacity: 1, regen: 0 }
   ];
 }
 
@@ -334,7 +351,8 @@ function updateEcosystemReadout() {
     return;
   }
   const structures = ecosystem.settlementWorks.reduce((sum, work) => sum + work.completed, 0);
-  status.textContent = ecosystem.particles.length + " residents / " + ecosystem.deliveries + " deliveries / " + structures + " structures / turn " + world.turn;
+  const provisions = ecosystem.resources.filter((site) => site.capacity > 1).reduce((sum, site) => sum + Math.round(site.stock), 0);
+  status.textContent = ecosystem.particles.length + " residents / " + provisions + " provisions / " + ecosystem.deliveries + " deliveries / " + structures + " shelters";
 }
 
 function resizeEcosystem() {
@@ -353,6 +371,11 @@ function resizeEcosystem() {
 function resetEcosystem() {
   if (!ecosystem.canvas || !world.settlements.length) return;
   resizeEcosystem();
+  ecosystem.resources = fieldSites().map((site, index) => ({
+    ...site,
+    stock: site.capacity > 1 ? Math.max(4, Math.round(site.capacity * (.48 + ((hash(world.seed + site.id) + index) % 31) / 100))) : site.capacity,
+    depletedAt: 0
+  }));
   const population = world.settlements.reduce((sum, settlement) => sum + settlement.population, 0);
   const residentCount = Math.min(72, Math.max(48, Math.round(population / 36)));
   ecosystem.particles = Array.from({ length: residentCount }, (_, index) => {
@@ -368,7 +391,14 @@ function resetEcosystem() {
     const y = (home.y / 100) * ecosystem.height + Math.sin(angle) * radius;
     const baseNeeds = agent.needs || { food: 60, shelter: 60, belonging: 60, wonder: 60 };
     const needs = Object.fromEntries(Object.entries(baseNeeds).map(([need, value], needIndex) => [need, clamp(value + ((seed >> (needIndex * 3)) % 19) - 9, 8, 100)]));
-    return { seed, agentIndex, homeIndex, phase: (seed % 12) / 12, x, y, vx: 0, vy: 0, tail: [{ x, y }], needs, memories: 0, ties: {}, carrying: null, deliveries: 0, activity: "belonging", urgency: 0.5, lastNeedTick: performance.now(), lastEncounter: performance.now() + (seed % 1100), lastGather: 0, lastDelivery: 0 };
+    const knownSites = ecosystem.resources.filter((site, siteIndex) => {
+      const sitePoint = resourcePosition(site);
+      const homeDistance = Math.hypot(sitePoint.x - (home.x / 100) * ecosystem.width, sitePoint.y - (home.y / 100) * ecosystem.height);
+      return site.need === "belonging" || homeDistance < ecosystem.width * .34 || (seed + siteIndex * 29) % 7 === 0;
+    }).map((site) => site.id);
+    const foodSite = ecosystem.resources.filter((site) => site.need === "food")[seed % 2];
+    if (foodSite && !knownSites.includes(foodSite.id)) knownSites.push(foodSite.id);
+    return { seed, agentIndex, homeIndex, phase: (seed % 12) / 12, x, y, vx: 0, vy: 0, tail: [{ x, y }], needs, memories: 0, ties: {}, knownSites, discoveries: knownSites.length, explore: { x: 12 + (seed % 76), y: 12 + ((seed >> 7) % 76) }, carrying: null, deliveries: 0, activity: "belonging", urgency: 0.5, lastNeedTick: performance.now(), lastEncounter: performance.now() + (seed % 1100), lastGather: 0, lastDelivery: 0 };
   });
   ecosystem.wildlife = Array.from({ length: 15 }, (_, index) => {
     const seed = hash(world.seed + ":wildlife:" + index);
@@ -382,6 +412,8 @@ function resetEcosystem() {
   ecosystem.encounters = [];
   ecosystem.exchanges = 0;
   ecosystem.deliveries = 0;
+  ecosystem.events = [];
+  ecosystem.lastEventAt = 0;
   ecosystem.settlementWorks = world.settlements.map((settlement, index) => ({
     grain: 0,
     timber: Math.max(0, Math.floor((64 - settlement.stability) / 11)),
@@ -392,13 +424,25 @@ function resetEcosystem() {
   ecosystem.lastCommittedDeliveries = 0;
   ecosystem.lastCommittedConstruction = 0;
   ecosystem.lastReadout = 0;
+  reportLiveEvent("Residents begin with partial knowledge of the valley.", performance.now(), true);
   updateEcosystemReadout();
+}
+
+function chooseKnownSite(particle, need) {
+  return ecosystem.resources
+    .filter((site) => site.need === need && particle.knownSites.includes(site.id) && (site.capacity <= 1 || site.stock >= 1))
+    .map((site) => {
+      const point = resourcePosition(site);
+      const distance = Math.hypot(point.x - particle.x, point.y - particle.y);
+      const availability = site.capacity > 1 ? site.stock / site.capacity : 1;
+      return { site, score: availability * 100 - distance * .085 + ((particle.seed + hash(site.id)) % 9) };
+    })
+    .sort((a, b) => b.score - a.score)[0]?.site || null;
 }
 
 function particleTarget(particle, now) {
   const [need, value] = Object.entries(particle.needs).sort(([, a], [, b]) => a - b)[0];
   const home = world.settlements[particle.homeIndex % world.settlements.length];
-  const neighbour = world.settlements[(particle.homeIndex + 1 + (particle.seed % Math.max(1, world.settlements.length - 1))) % world.settlements.length];
   if (particle.carrying) {
     return {
       need: particle.carrying === "grain" ? "food" : "shelter",
@@ -409,26 +453,25 @@ function particleTarget(particle, now) {
       resource: particle.carrying
     };
   }
-  const travelling = Math.floor(now / 2800 + particle.phase) % 2 === 0;
-  const sites = fieldSites();
-  let destination = home;
-  let mode = "restore";
-  let resource = null;
-  const foodSites = sites.filter((site) => site.need === "food");
-  const shelterSites = sites.filter((site) => site.need === "shelter");
-  const belongingSites = sites.filter((site) => site.need === "belonging");
-  const wonderSites = sites.filter((site) => site.need === "wonder");
-  if (need === "food") { destination = travelling ? foodSites[particle.seed % foodSites.length] : home; mode = travelling ? "gather" : "restore"; resource = "grain"; }
-  if (need === "shelter") { destination = travelling ? shelterSites[0] : home; mode = travelling ? "gather" : "restore"; resource = "timber"; }
-  if (need === "belonging") destination = travelling ? belongingSites[0] : neighbour;
-  if (need === "wonder") destination = wonderSites[particle.seed % wonderSites.length];
+  const site = chooseKnownSite(particle, need);
+  if (!site) {
+    const x = (particle.explore.x / 100) * ecosystem.width;
+    const y = (particle.explore.y / 100) * ecosystem.height;
+    return { need, urgency: (100 - value) / 100, x, y, mode: "explore", resource: null };
+  }
+  const destination = site;
+  const mode = need === "food" || need === "shelter" ? "gather" : "restore";
+  const resource = need === "food" ? "grain" : need === "shelter" ? "timber" : null;
   const sway = Math.sin(now / 850 + particle.phase * 7) * 1.6;
-  return { need, urgency: (100 - value) / 100, x: ((destination.x + sway) / 100) * ecosystem.width, y: ((destination.y + Math.cos(now / 1000 + particle.phase * 9) * 1.3) / 100) * ecosystem.height, mode, resource };
+  return { need, urgency: (100 - value) / 100, x: ((destination.x + sway) / 100) * ecosystem.width, y: ((destination.y + Math.cos(now / 1000 + particle.phase * 9) * 1.3) / 100) * ecosystem.height, mode, resource, siteId: site.id };
 }
 
 function updateEcosystem(now) {
   const dt = Math.min(2, Math.max(0.4, (now - (ecosystem.lastFrame || now)) / 16.67));
   ecosystem.lastFrame = now;
+  ecosystem.resources.forEach((site) => {
+    if (site.capacity > 1 && site.stock < site.capacity) site.stock = Math.min(site.capacity, site.stock + site.regen * dt);
+  });
   ecosystem.particles.forEach((particle) => {
     const elapsed = Math.max(0, (now - particle.lastNeedTick) / 1000);
     if (elapsed > 0.65) {
@@ -438,6 +481,15 @@ function updateEcosystem(now) {
       particle.needs.wonder = Math.max(8, particle.needs.wonder - elapsed * 0.16);
       particle.lastNeedTick = now;
     }
+    ecosystem.resources.forEach((site) => {
+      if (particle.knownSites.includes(site.id)) return;
+      const point = resourcePosition(site);
+      if (Math.hypot(point.x - particle.x, point.y - particle.y) < 50) {
+        particle.knownSites.push(site.id);
+        particle.discoveries += 1;
+        reportLiveEvent("A resident discovers the " + site.label + ".", now);
+      }
+    });
     const target = particleTarget(particle, now);
     const dx = target.x - particle.x;
     const dy = target.y - particle.y;
@@ -451,12 +503,22 @@ function updateEcosystem(now) {
     particle.urgency = target.urgency;
     if (distance < 14) {
       if (target.mode === "gather" && !particle.carrying && now - particle.lastGather > 650) {
-        particle.carrying = target.resource;
-        particle.lastGather = now;
+        const site = resourceById(target.siteId);
+        if (site && site.stock >= 1) {
+          site.stock -= 1;
+          particle.carrying = target.resource;
+          particle.lastGather = now;
+          reportLiveEvent(site.label + " supplies " + (target.resource === "grain" ? "grain" : "timber") + " to a nearby resident.", now);
+        } else if (site) {
+          site.depletedAt = now;
+          particle.explore = { x: 9 + ((particle.seed + Math.round(now / 100)) % 82), y: 12 + ((particle.seed >> 4) % 74) };
+          reportLiveEvent(site.label + " is depleted; residents begin searching elsewhere.", now);
+        }
       } else if (target.mode === "deliver" && particle.carrying && now - particle.lastDelivery > 650) {
         const work = ecosystem.settlementWorks[particle.homeIndex];
+        const delivered = particle.carrying;
         if (work) {
-          if (particle.carrying === "grain") {
+          if (delivered === "grain") {
             work.grain = Math.min(18, work.grain + 1);
             particle.needs.food = Math.min(100, particle.needs.food + 16);
           } else {
@@ -474,9 +536,13 @@ function updateEcosystem(now) {
         particle.deliveries += 1;
         particle.carrying = null;
         particle.lastDelivery = now;
+        reportLiveEvent(world.settlements[particle.homeIndex].name + " receives " + (delivered === "grain" ? "grain" : "timber") + ".", now);
       } else if (target.mode === "restore") {
         particle.needs[target.need] = Math.min(100, particle.needs[target.need] + (target.need === "belonging" ? 0.75 : 0.52) * dt);
         if (target.need === "wonder") particle.memories += 0.01 * dt;
+      } else if (target.mode === "explore") {
+        particle.explore = { x: 8 + ((particle.seed + Math.round(now / 120)) % 84), y: 10 + ((particle.seed >> 3) % 80) };
+        particle.memories += .04;
       }
     }
     const previous = particle.tail.at(-1);
@@ -513,6 +579,16 @@ function updateEcosystem(now) {
         b.needs.belonging = Math.min(100, b.needs.belonging + 14);
         a.ties[b.homeIndex] = (a.ties[b.homeIndex] || 0) + 1;
         b.ties[a.homeIndex] = (b.ties[a.homeIndex] || 0) + 1;
+        const sharedKnowledge = [...new Set([...a.knownSites, ...b.knownSites])];
+        const learnedByA = sharedKnowledge.length - a.knownSites.length;
+        const learnedByB = sharedKnowledge.length - b.knownSites.length;
+        if (learnedByA || learnedByB) {
+          a.knownSites = sharedKnowledge.slice();
+          b.knownSites = sharedKnowledge.slice();
+          a.discoveries += learnedByA;
+          b.discoveries += learnedByB;
+          reportLiveEvent("Two residents exchange knowledge of a resource route.", now);
+        }
         a.lastEncounter = now; b.lastEncounter = now; newEncounters += 1;
       }
     }
@@ -524,12 +600,15 @@ function drawResourceSite(context, site, now, nightStrength) {
   const x = (site.x / 100) * ecosystem.width;
   const y = (site.y / 100) * ecosystem.height;
   const color = needColors[site.need];
+  const availability = site.capacity > 1 ? Math.max(.08, site.stock / site.capacity) : 1;
   const pulse = 0.5 + Math.sin(now / 700 + x * .08 + y * .04) * 0.5;
   const glow = context.createRadialGradient(x, y, 1, x, y, 30 + pulse * 7);
-  glow.addColorStop(0, color + "42");
+  glow.addColorStop(0, color + Math.round((20 + availability * 46)).toString(16).padStart(2, "0"));
   glow.addColorStop(1, color + "00");
   context.fillStyle = glow;
   context.beginPath(); context.arc(x, y, 31 + pulse * 6, 0, Math.PI * 2); context.fill();
+  context.save();
+  context.globalAlpha = .35 + availability * .65;
 
   if (site.need === "food") {
     context.strokeStyle = "rgba(187,221,113,.38)";
@@ -572,6 +651,13 @@ function drawResourceSite(context, site, now, nightStrength) {
       context.save(); context.translate(x + Math.cos(angle) * 8, y + Math.sin(angle) * 6); context.rotate(angle); context.strokeRect(-1.8, -4, 3.6, 8); context.restore();
     }
     context.beginPath(); context.arc(x, y, 4 + pulse * 1.5, 0, Math.PI * 2); context.stroke();
+  }
+  context.restore();
+  if (site.capacity > 1) {
+    context.fillStyle = "rgba(4,20,17,.72)";
+    context.fillRect(x - 10, y + 17, 20, 2.5);
+    context.fillStyle = color;
+    context.fillRect(x - 10, y + 17, 20 * availability, 2.5);
   }
 }
 
@@ -746,7 +832,7 @@ function drawEcosystem(now) {
   context.fillRect(0, 0, ecosystem.width, ecosystem.height);
 
   drawLivingWater(context, now, daylight);
-  fieldSites().forEach((site) => drawResourceSite(context, site, now, nightStrength));
+  ecosystem.resources.forEach((site) => drawResourceSite(context, site, now, nightStrength));
 
   world.settlements.forEach((settlement, index) => drawVillage(context, settlement, index, nightStrength));
   ecosystem.wildlife.slice().sort((a, b) => a.y - b.y).forEach((animal) => drawWildlife(context, animal));
@@ -828,7 +914,7 @@ function commitEcosystemTurn() {
 
 function animateEcosystem(now) {
   if (!ecosystem.running) return;
-  if (!ecosystem.reducedMotion || now - (ecosystem.lastFrame || 0) > 180) updateEcosystem(now);
+  updateEcosystem(now);
   drawEcosystem(now);
   requestAnimationFrame(animateEcosystem);
 }
