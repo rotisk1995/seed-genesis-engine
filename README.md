@@ -68,6 +68,10 @@ The implementation roadmap and official requirements are documented in [PRODUCT_
 
 Open `unreal/SEEDGenesis/SEEDGenesis.uproject` in Unreal Engine 5.8, allow it to compile the C++ module, then press Play. It does not require marketplace assets: residents, terrain, trees, resource markers, and buildings are generated from engine geometry at runtime.
 
+### Python-only Unreal generator
+
+`unreal/SEEDPython` is the runnable route on this computer: it is a Blueprint-only Unreal project with no C++ compilation step. Its Python generator has already created and saved `Content/Generated/SEEDPythonWorld.umap`, including procedural terrain, a river, resources, trees, original 3D residents, settlements, and varied houses. Open `unreal/SEEDPython/SEEDPython.uproject` in Unreal Engine 5.8 to inspect it. Re-run `Content/Python/seed_world.py` through **File → Execute Python Script** to regenerate the same deterministic world.
+
 ## OpenAI Build Week
 
 SEED is built with Codex and GPT-5.6 for OpenAI Build Week.
