@@ -160,7 +160,7 @@ function renderTrace() {
 }
 
 const needColors = { food: "#a8eb93", shelter: "#78e4db", belonging: "#c4a4f2", wonder: "#e3bc76" };
-const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, particles: [], wildlife: [], encounters: [], exchanges: 0, deliveries: 0, settlementWorks: [], lastCommittedExchanges: 0, lastCommittedDeliveries: 0, lastCommittedConstruction: 0, lastFrame: 0, lastReadout: 0, running: false, camera: { x: 0, y: 0, zoom: 1.16, focus: "" } };
+const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, particles: [], wildlife: [], encounters: [], exchanges: 0, deliveries: 0, settlementWorks: [], lastCommittedExchanges: 0, lastCommittedDeliveries: 0, lastCommittedConstruction: 0, lastFrame: 0, lastReadout: 0, running: false, reducedMotion: false, camera: { x: 0, y: 0, zoom: 1.16, focus: "" } };
 let cinematic = null;
 
 function fieldSites() {
@@ -386,7 +386,7 @@ function particleTarget(particle, now) {
       resource: particle.carrying
     };
   }
-  const travelling = Math.floor(now / 3800 + particle.phase) % 2 === 0;
+  const travelling = Math.floor(now / 2800 + particle.phase) % 2 === 0;
   const sites = fieldSites();
   let destination = home;
   let mode = "restore";
@@ -419,7 +419,7 @@ function updateEcosystem(now) {
     const dx = target.x - particle.x;
     const dy = target.y - particle.y;
     const distance = Math.max(1, Math.hypot(dx, dy));
-    const force = 0.018 + target.urgency * 0.042;
+    const force = 0.028 + target.urgency * 0.062;
     particle.vx = (particle.vx + (dx / distance) * force * dt) * 0.91;
     particle.vy = (particle.vy + (dy / distance) * force * dt) * 0.91;
     particle.x = Math.max(8, Math.min(ecosystem.width - 8, particle.x + particle.vx * dt));
@@ -761,7 +761,7 @@ function commitEcosystemTurn() {
 
 function animateEcosystem(now) {
   if (!ecosystem.running) return;
-  updateEcosystem(now);
+  if (!ecosystem.reducedMotion || now - (ecosystem.lastFrame || 0) > 180) updateEcosystem(now);
   drawEcosystem(now);
   requestAnimationFrame(animateEcosystem);
 }
@@ -790,10 +790,7 @@ function initialiseEcosystem() {
   });
   window.addEventListener("resize", resizeEcosystem);
   resetEcosystem();
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    drawEcosystem(performance.now());
-    return;
-  }
+  ecosystem.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   ecosystem.running = true;
   requestAnimationFrame(animateEcosystem);
 }
