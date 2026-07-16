@@ -273,6 +273,22 @@ function rebuildTerrainLayer() {
   context.lineWidth = 3.5;
   context.stroke();
 
+  fieldSites().filter((site) => site.need === "food").forEach((site, siteIndex) => {
+    const x = (site.x / 100) * width;
+    const y = (site.y / 100) * height;
+    context.save();
+    context.translate(x, y);
+    context.rotate(siteIndex ? -.2 : .16);
+    context.fillStyle = "rgba(115,143,66,.16)";
+    context.beginPath(); context.ellipse(0, 0, 36, 16, 0, 0, Math.PI * 2); context.fill();
+    context.strokeStyle = "rgba(198,212,108,.2)";
+    context.lineWidth = .9;
+    for (let row = -12; row <= 12; row += 5) {
+      context.beginPath(); context.moveTo(-29, row); context.quadraticCurveTo(0, row - 3, 29, row); context.stroke();
+    }
+    context.restore();
+  });
+
   for (let tree = 0; tree < 165; tree += 1) {
     const x = random() * width;
     const y = random() * height;
@@ -298,6 +314,14 @@ function rebuildTerrainLayer() {
     context.stroke();
   });
   context.setLineDash([]);
+
+  context.strokeStyle = "rgba(201,173,108,.12)";
+  context.lineWidth = 1;
+  world.settlements.forEach((settlement) => {
+    const x = (settlement.x / 100) * width;
+    const y = (settlement.y / 100) * height;
+    context.beginPath(); context.arc(x, y, 34, 0, Math.PI * 2); context.stroke();
+  });
 
   ecosystem.terrain = terrain;
 }
@@ -640,6 +664,48 @@ function drawWildlife(context, animal) {
   context.fill();
 }
 
+function drawLivingWater(context, now, daylight) {
+  const width = ecosystem.width;
+  const height = ecosystem.height;
+  context.save();
+  context.lineCap = "round";
+  for (let ribbon = 0; ribbon < 5; ribbon += 1) {
+    const offset = (ribbon - 2) * 3;
+    context.strokeStyle = "rgba(163,244,230," + (.08 + daylight * .12) + ")";
+    context.lineWidth = ribbon === 2 ? 1.4 : .75;
+    context.beginPath();
+    context.moveTo(-8, height * .21 + offset);
+    context.bezierCurveTo(width * .18, height * .34 + Math.sin(now / 1500 + ribbon) * 3 + offset, width * .31, height * .16 + offset, width * .49, height * .47 + offset);
+    context.bezierCurveTo(width * .62, height * .72 + offset, width * .77, height * .58 + Math.cos(now / 1500 + ribbon) * 3 + offset, width + 8, height * .86 + offset);
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawAtmosphere(context, now, nightStrength) {
+  const width = ecosystem.width;
+  const height = ecosystem.height;
+  const mistShift = ((now / 42) % (width + 280)) - 140;
+  context.save();
+  context.globalCompositeOperation = "screen";
+  const mist = context.createLinearGradient(mistShift - 170, 0, mistShift + 190, 0);
+  mist.addColorStop(0, "rgba(156,224,203,0)");
+  mist.addColorStop(.5, "rgba(156,224,203," + (.025 + nightStrength * .035) + ")");
+  mist.addColorStop(1, "rgba(156,224,203,0)");
+  context.fillStyle = mist;
+  context.fillRect(mistShift - 170, height * .18, 360, height * .48);
+  if (nightStrength > .3) {
+    for (let firefly = 0; firefly < 19; firefly += 1) {
+      const x = ((firefly * 89 + 47) % width) + Math.sin(now / 800 + firefly) * 6;
+      const y = height * (.12 + ((firefly * 37) % 72) / 100) + Math.cos(now / 900 + firefly * 2) * 4;
+      const alpha = nightStrength * (.16 + (Math.sin(now / 330 + firefly) + 1) * .12);
+      context.fillStyle = "rgba(214,255,156," + alpha + ")";
+      context.beginPath(); context.arc(x, y, 1.2, 0, Math.PI * 2); context.fill();
+    }
+  }
+  context.restore();
+}
+
 function drawSettlementLabels(context) {
   context.save();
   context.font = '500 10px "DM Mono", monospace';
@@ -679,6 +745,7 @@ function drawEcosystem(now) {
   context.fillStyle = dawnGlow;
   context.fillRect(0, 0, ecosystem.width, ecosystem.height);
 
+  drawLivingWater(context, now, daylight);
   fieldSites().forEach((site) => drawResourceSite(context, site, now, nightStrength));
 
   world.settlements.forEach((settlement, index) => drawVillage(context, settlement, index, nightStrength));
@@ -709,6 +776,7 @@ function drawEcosystem(now) {
   darkness.addColorStop(1, "rgba(2,8,14," + (nightStrength * 0.46) + ")");
   context.fillStyle = darkness;
   context.fillRect(0, 0, ecosystem.width, ecosystem.height);
+  drawAtmosphere(context, now, nightStrength);
   const vignette = context.createRadialGradient(ecosystem.width / 2, ecosystem.height / 2, ecosystem.width * 0.16, ecosystem.width / 2, ecosystem.height / 2, ecosystem.width * 0.72);
   vignette.addColorStop(0, "rgba(0,0,0,0)");
   vignette.addColorStop(1, "rgba(0,8,7,.34)");
