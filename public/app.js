@@ -1043,11 +1043,19 @@ function drawEcosystem(now) {
     const width = ecosystem.cellWidth + .35;
     const height = ecosystem.cellHeight + .35;
     const intensity = clampUnit(charge * (.74 + cell.memory * .18));
-    const pigment = vividPigment(cell.pigment, .94 + intensity * .22);
-    context.fillStyle = rgba(pigment, .12 + intensity * .86);
+    const pigment = vividPigment(cell.pigment, 1.12);
+    context.fillStyle = rgba(pigment, .9);
     context.fillRect(x, y, width, height);
+    if (charge > .16) {
+      const pulse = .5 + Math.sin(now / 210 + index * .73) * .5;
+      context.save();
+      context.globalCompositeOperation = "screen";
+      context.fillStyle = rgba(vividPigment(pigment, 1.24), .1 + intensity * pulse * .34);
+      context.fillRect(x, y, width, height);
+      context.restore();
+    }
     if (cell.construction > .09) {
-      context.fillStyle = rgba(vividPigment(mixPigments([pigment, [255, 255, 255]], [.82, .18])), .22 + cell.construction * .66);
+      context.fillStyle = rgba(vividPigment(pigment, 1.34), .52 + cell.construction * .42);
       context.fillRect(x, y, width, height);
     }
   });
