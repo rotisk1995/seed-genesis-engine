@@ -157,7 +157,7 @@ function renderTrace() {
   $("#causalTrace").innerHTML = (world.traces || []).slice().reverse().map((trace) => '<div class="trace-row"><span class="trace-turn">T' + String(trace.turn).padStart(2, "0") + '</span><div><b>' + esc(trace.source) + '</b><p>' + esc(trace.action) + '</p><small>' + esc(trace.effect) + '</small></div></div>').join("");
 }
 
-const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, cells: [], cellColumns: 0, cellRows: 0, cellWidth: 0, cellHeight: 0, particles: [], wildlife: [], resources: [], encounters: [], exchanges: 0, deliveries: 0, settlementWorks: [], events: [], lastEventAt: 0, lastCommittedExchanges: 0, lastCommittedDeliveries: 0, lastCommittedConstruction: 0, lastFrame: 0, lastReadout: 0, running: false, reducedMotion: false, camera: { x: 0, y: 0, zoom: 1 } };
+const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, cells: new Map(), cellColumns: 0, cellRows: 0, cellWidth: 0, cellHeight: 0, particles: [], wildlife: [], resources: [], encounters: [], exchanges: 0, deliveries: 0, settlementWorks: [], events: [], lastEventAt: 0, lastCommittedExchanges: 0, lastCommittedDeliveries: 0, lastCommittedConstruction: 0, lastFrame: 0, lastReadout: 0, running: false, reducedMotion: false, camera: { x: 0, y: 0, zoom: 1 } };
 
 const clampChannel = (value) => Math.max(0, Math.min(255, Math.round(value)));
 const rgba = (pigment, alpha = 1) => "rgba(" + pigment.map(clampChannel).join(",") + "," + Math.max(0, Math.min(1, alpha)).toFixed(3) + ")";
@@ -237,17 +237,20 @@ function vividPigment(pigment, intensity = 1) {
 
 function rebuildCellField() {
   if (!ecosystem.width || !ecosystem.height) return;
-  const targetCell = Math.max(6.5, Math.min(7.5, ecosystem.width / 96));
-  ecosystem.cellColumns = Math.max(72, Math.floor(ecosystem.width / targetCell));
-  ecosystem.cellRows = Math.max(54, Math.floor(ecosystem.height / targetCell));
+  ecosystem.cellColumns = 1000;
+  ecosystem.cellRows = 1000;
   ecosystem.cellWidth = ecosystem.width / ecosystem.cellColumns;
   ecosystem.cellHeight = ecosystem.height / ecosystem.cellRows;
-  ecosystem.cells = Array.from({ length: ecosystem.cellColumns * ecosystem.cellRows }, () => ({ charge: 0, nextCharge: 0, pigment: [0, 0, 0], nextPigment: [0, 0, 0], construction: 0, memory: 0 }));
+  ecosystem.cells = new Map();
 }
 
 function cellIndex(column, row) {
   if (column < 0 || row < 0 || column >= ecosystem.cellColumns || row >= ecosystem.cellRows) return -1;
   return row * ecosystem.cellColumns + column;
+}
+
+function emptyCell() {
+  return { charge: 0, pigment: [0, 0, 0], construction: 0, memory: 0 };
 }
 
 function cellCoordinates(x, y) {
@@ -260,48 +263,48 @@ function cellCoordinates(x, y) {
 function chargeCell(column, row, pigment, amount, construction = 0, memory = 0) {
   const index = cellIndex(column, row);
   if (index < 0 || !pigment) return;
-  const cell = ecosystem.cells[index];
+  const cell = ecosystem.cells.get(index) || emptyCell();
   const previous = cell.charge;
   const incoming = Math.max(.001, amount);
   cell.pigment = mixPigments([cell.pigment, pigment], [previous + .015, incoming]);
   cell.charge = Math.min(1.35, previous + incoming);
   cell.construction = Math.min(1, cell.construction + construction);
   cell.memory = Math.min(1, cell.memory + memory);
+  ecosystem.cells.set(index, cell);
 }
 
-function chargeFieldAt(x, y, pigment, amount, construction = 0, memory = 0) {
-  if (!ecosystem.cells.length) return;
+function chargeFieldAt(x, y, pigment, amount, construction = 0, memory = 0, radius = 3) {
+  if (!ecosystem.cellColumns) return;
   const { column, row } = cellCoordinates(x, y);
-  for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
-    for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-      const distance = Math.abs(offsetX) + Math.abs(offsetY);
-      const weight = distance === 0 ? 1 : distance === 1 ? .38 : .13;
-      chargeCell(column + offsetX, row + offsetY, pigment, amount * weight, construction * weight, memory * weight);
+  for (let offsetY = -radius; offsetY <= radius; offsetY += 1) {
+    for (let offsetX = -radius; offsetX <= radius; offsetX += 1) {
+      const distance = Math.hypot(offsetX, offsetY);
+      const weight = Math.max(0, 1 - distance / (radius + .75)) ** 1.6;
+      if (weight > 0) chargeCell(column + offsetX, row + offsetY, pigment, amount * weight, construction * weight, memory * weight);
     }
   }
 }
 
 function exciteCellField(now, dt) {
-  if (!ecosystem.cells.length) return;
   ecosystem.resources.forEach((site) => {
     if (site.capacity <= 1) return;
     const point = resourcePosition(site);
-    chargeFieldAt(point.x, point.y, resourcePigment(site), .026 * Math.max(.12, site.stock / site.capacity) * dt, 0, .005 * dt);
+    chargeFieldAt(point.x, point.y, resourcePigment(site), .026 * Math.max(.12, site.stock / site.capacity) * dt, 0, .005 * dt, 5);
   });
   ecosystem.particles.forEach((particle) => {
     const pigment = residentPigment(particle, now);
     const speed = Math.min(1, Math.hypot(particle.vx, particle.vy) / 1.2);
-    const spread = ecosystem.cellWidth * (1.15 + Math.sin(now / 1400 + particle.phase * 9) * .35);
+    const spread = ecosystem.cellWidth * (6 + Math.sin(now / 1400 + particle.phase * 9) * 2);
     const localX = particle.x + Math.cos(particle.seed * .017 + now / 3300) * spread;
     const localY = particle.y + Math.sin(particle.seed * .013 + now / 2800) * spread;
-    chargeFieldAt(localX, localY, pigment, (.028 + speed * .05) * dt, 0, particle.memories > 0 ? .004 * dt : 0);
+    chargeFieldAt(localX, localY, pigment, (.028 + speed * .05) * dt, 0, particle.memories > 0 ? .004 * dt : 0, 3);
     if (particle.carrying) {
       const offsetX = particle.vx * 7;
       const offsetY = particle.vy * 7;
-      chargeFieldAt(particle.x + offsetX, particle.y + offsetY, particle.carrying.pigment, .16 * dt, 0, .018 * dt);
+      chargeFieldAt(particle.x + offsetX, particle.y + offsetY, particle.carrying.pigment, .16 * dt, 0, .018 * dt, 5);
     }
   });
-  ecosystem.encounters.forEach((encounter) => chargeFieldAt(encounter.x, encounter.y, encounter.pigment || [160, 160, 160], .03 * dt, 0, .055 * dt));
+  ecosystem.encounters.forEach((encounter) => chargeFieldAt(encounter.x, encounter.y, encounter.pigment || [160, 160, 160], .03 * dt, 0, .055 * dt, 5));
   world.settlements.forEach((settlement, index) => {
     const work = ecosystem.settlementWorks[index];
     if (!work || (!work.progress && !work.completed)) return;
@@ -313,16 +316,28 @@ function exciteCellField(now, dt) {
     for (let node = 0; node < span; node += 1) {
       const angle = (seed % 628) / 100 + node * 2.399;
       const radius = 5 + (node % 3) * ecosystem.cellWidth * 1.2;
-      chargeFieldAt(centerX + Math.cos(angle) * radius, centerY + Math.sin(angle) * radius, pigment, .08 * dt, .075 * dt, .012 * dt);
+      chargeFieldAt(centerX + Math.cos(angle) * radius, centerY + Math.sin(angle) * radius, pigment, .08 * dt, .075 * dt, .012 * dt, 4);
     }
   });
 
   const columns = ecosystem.cellColumns;
-  ecosystem.cells.forEach((cell, index) => {
+  const frontier = new Set();
+  ecosystem.cells.forEach((_, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+      for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+        const candidate = cellIndex(column + offsetX, row + offsetY);
+        if (candidate >= 0) frontier.add(candidate);
+      }
+    }
+  });
+  const nextCells = new Map();
+  frontier.forEach((index) => {
+    const cell = ecosystem.cells.get(index) || emptyCell();
     const column = index % columns;
     const row = Math.floor(index / columns);
     let neighborCharge = 0;
-    let neighborConstruction = 0;
     let neighborMemory = 0;
     let neighborPigment = [0, 0, 0];
     let activeNeighbors = 0;
@@ -332,10 +347,9 @@ function exciteCellField(now, dt) {
         if (!offsetX && !offsetY) continue;
         const neighborIndex = cellIndex(column + offsetX, row + offsetY);
         if (neighborIndex < 0) continue;
-        const neighbor = ecosystem.cells[neighborIndex];
+        const neighbor = ecosystem.cells.get(neighborIndex) || emptyCell();
         neighbors += 1;
         neighborCharge += neighbor.charge;
-        neighborConstruction += neighbor.construction;
         neighborMemory += neighbor.memory;
         neighborPigment = neighborPigment.map((channel, channelIndex) => channel + neighbor.pigment[channelIndex] * neighbor.charge);
         if (neighbor.charge > .13) activeNeighbors += 1;
@@ -344,15 +358,14 @@ function exciteCellField(now, dt) {
     const meanCharge = neighbors ? neighborCharge / neighbors : 0;
     const reproduction = activeNeighbors === 3 && meanCharge > .075 ? .052 : activeNeighbors === 2 && cell.charge > .1 ? .014 : activeNeighbors >= 5 ? -.055 : 0;
     const neighborAveragePigment = neighborCharge > .005 ? neighborPigment.map((channel) => channel / neighborCharge) : cell.pigment;
-    cell.nextCharge = clampUnit(cell.charge * .74 + meanCharge * .09 + reproduction + cell.construction * .015);
-    cell.nextPigment = neighborCharge > .005 ? mixPigments([cell.pigment, neighborAveragePigment], [cell.charge * .9 + .01, neighborCharge * .1]) : cell.pigment;
-    cell.construction = clampUnit(cell.construction * .995);
-    cell.memory = clampUnit(cell.memory * .985 + neighborMemory / Math.max(1, neighbors) * .002);
+    const charge = clampUnit(cell.charge * .74 + meanCharge * .09 + reproduction + cell.construction * .015);
+    const construction = clampUnit(cell.construction * .995);
+    const memory = clampUnit(cell.memory * .985 + neighborMemory / Math.max(1, neighbors) * .002);
+    if (charge > .012 || construction > .01 || memory > .006) {
+      nextCells.set(index, { charge, pigment: neighborCharge > .005 ? mixPigments([cell.pigment, neighborAveragePigment], [cell.charge * .9 + .01, neighborCharge * .1]) : cell.pigment, construction, memory });
+    }
   });
-  ecosystem.cells.forEach((cell) => {
-    cell.charge = cell.nextCharge;
-    cell.pigment = cell.nextPigment;
-  });
+  ecosystem.cells = nextCells;
 }
 
 function resourceById(id) {
@@ -545,8 +558,8 @@ function updateEcosystemReadout() {
   }
   const structures = ecosystem.settlementWorks.reduce((sum, work) => sum + work.completed, 0);
   const provisions = ecosystem.resources.filter((site) => site.capacity > 1).reduce((sum, site) => sum + Math.round(site.stock), 0);
-  const activeCells = ecosystem.cells.reduce((sum, cell) => sum + (cell.charge > .11 ? 1 : 0), 0);
-  status.textContent = activeCells + " active cells / " + provisions + " source units / " + ecosystem.deliveries + " material transfers / " + structures + " lattice forms";
+  const activeCells = [...ecosystem.cells.values()].reduce((sum, cell) => sum + (cell.charge > .11 ? 1 : 0), 0);
+  status.textContent = "1000² substrate / " + activeCells + " active / " + ecosystem.deliveries + " transfers / " + structures + " lattice forms";
 }
 
 function resizeEcosystem() {
@@ -1028,7 +1041,7 @@ function drawSettlementLabels(context) {
 
 function drawEcosystem(now) {
   const context = ecosystem.context;
-  if (!context || !ecosystem.cells.length) return;
+  if (!context || !ecosystem.cellColumns) return;
   context.clearRect(0, 0, ecosystem.width, ecosystem.height);
   context.fillStyle = "rgb(2,5,5)";
   context.fillRect(0, 0, ecosystem.width, ecosystem.height);
@@ -1060,13 +1073,13 @@ function drawEcosystem(now) {
     }
   });
 
-  const activeCells = ecosystem.cells.reduce((sum, cell) => sum + (cell.charge > .11 ? 1 : 0), 0);
-  const constructedCells = ecosystem.cells.reduce((sum, cell) => sum + (cell.construction > .12 ? 1 : 0), 0);
+  const activeCells = [...ecosystem.cells.values()].reduce((sum, cell) => sum + (cell.charge > .11 ? 1 : 0), 0);
+  const constructedCells = [...ecosystem.cells.values()].reduce((sum, cell) => sum + (cell.construction > .12 ? 1 : 0), 0);
   if (now - ecosystem.lastReadout > 550) {
     ecosystem.lastReadout = now;
     updateEcosystemReadout();
     const caption = $("#cameraFocus");
-    if (caption) caption.textContent = "cellular substrate / " + activeCells + " active / " + constructedCells + " persistent";
+    if (caption) caption.textContent = "1000² substrate / " + activeCells + " active / " + constructedCells + " persistent";
   }
 }
 
