@@ -11,6 +11,7 @@ SEED is an AI-native genesis engine for emergent worlds. It gives autonomous lif
 - Models distinct settlements, collective pressures, local stability, and an evolving chronicle.
 - Gives autonomous residents needs for food, shelter, belonging, and wonder; advancing a turn lets their responses alter the world without a creator decree.
 - Visualizes a live resident field: independent particles pursue needs, remember cross-settlement encounters, form local ties, and feed those exchanges into the next simulation turn.
+- Makes provisioning visible: residents gather grain and timber at local resource sites, carry it to their settlement, and delivered timber becomes a new shelter rather than a scripted upgrade.
 - Renders that same state as an original real-time WebGL observation scene: procedural terrain, water, roads, settlement buildings, residents, wildlife, atmospheric light, and a moving observer camera.
 - Lets a creator issue a decree and observe a state-dependent consequence.
 - Surfaces a causal trace so each decree or autonomous action can be connected to the changing conditions it produces.

@@ -128,8 +128,12 @@ export function createCinematicRenderer(canvas) {
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), new THREE.MeshStandardMaterial({ color: 0xf0c78e, roughness: 1, flatShading: true }));
     head.position.y = 0.48;
     head.castShadow = true;
-    resident.add(body, head);
+    const bundle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.12), new THREE.MeshStandardMaterial({ color: 0xe3bc76, roughness: 1 }));
+    bundle.position.set(0.13, 0.22, 0);
+    bundle.visible = false;
+    resident.add(body, head, bundle);
     resident.userData.body = body;
+    resident.userData.bundle = bundle;
     return resident;
   }
 
@@ -195,7 +199,8 @@ export function createCinematicRenderer(canvas) {
     snapshot.world.settlements.forEach((settlement, settlementIndex) => {
       const point = mapPoint((settlement.x / 100) * snapshot.width, (settlement.y / 100) * snapshot.height, snapshot);
       const village = new THREE.Group();
-      const buildings = Math.max(3, Math.min(8, 3 + Math.floor(settlement.population / 240)));
+      const completed = snapshot.works?.[settlementIndex]?.completed || 0;
+      const buildings = Math.max(3, Math.min(8, 3 + Math.floor(settlement.population / 240) + completed));
       for (let buildingIndex = 0; buildingIndex < buildings; buildingIndex += 1) {
         const building = makeHouse(buildingIndex + settlementIndex);
         building.position.set(((buildingIndex % 3) - 1) * 0.78 + (random() - 0.5) * 0.2, 0, (Math.floor(buildingIndex / 3) - 0.5) * 0.86 + (random() - 0.5) * 0.2);
@@ -244,7 +249,8 @@ export function createCinematicRenderer(canvas) {
 
   function render(snapshot, now) {
     resize();
-    const nextSignature = snapshot.world.seed + ":" + snapshot.world.name + ":" + snapshot.world.settlements.length + ":" + snapshot.particles.length;
+    const completedWorks = (snapshot.works || []).map((work) => work.completed).join(",");
+    const nextSignature = snapshot.world.seed + ":" + snapshot.world.name + ":" + snapshot.world.settlements.length + ":" + snapshot.particles.length + ":" + completedWorks;
     if (nextSignature !== signature) {
       signature = nextSignature;
       buildWorld(snapshot);
@@ -256,6 +262,8 @@ export function createCinematicRenderer(canvas) {
       const point = mapPoint(particle.x, particle.y, snapshot);
       mesh.position.set(point.x, 0.08, point.z);
       mesh.userData.body.material.color.setHex(needColors[particle.activity] || needColors.belonging);
+      mesh.userData.bundle.visible = Boolean(particle.carrying);
+      if (particle.carrying) mesh.userData.bundle.material.color.setHex(particle.carrying === "grain" ? 0xe3bc76 : 0x8a6943);
       mesh.rotation.y = Math.atan2(particle.vx || 0.001, particle.vy || 0.001);
     });
     snapshot.wildlife.forEach((animal, index) => {
