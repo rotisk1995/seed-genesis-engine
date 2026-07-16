@@ -1,6 +1,33 @@
 import * as THREE from "/vendor/three.module.js";
 
-const needColors = { food: 0xa8eb93, shelter: 0x78e4db, belonging: 0xc4a4f2, wonder: 0xe3bc76 };
+function mixPigments(pigments, weights = []) {
+  const layers = pigments.map((pigment, index) => ({ pigment, weight: weights[index] ?? 1 })).filter((layer) => layer.pigment && layer.weight > 0);
+  if (!layers.length) return [127, 160, 142];
+  const total = layers.reduce((sum, layer) => sum + layer.weight, 0) || 1;
+  return [0, 1, 2].map((channel) => layers.reduce((sum, layer) => sum + layer.pigment[channel] * layer.weight, 0) / total);
+}
+
+function pigmentColor(pigment) {
+  return new THREE.Color(Math.max(0, Math.min(255, pigment[0])) / 255, Math.max(0, Math.min(255, pigment[1])) / 255, Math.max(0, Math.min(255, pigment[2])) / 255);
+}
+
+function worldPigment(world) {
+  return [24 + world.conditions.cohesion * 1.42 + world.conditions.mystery * .26, 31 + world.conditions.abundance * 1.56 + world.conditions.water * .34, 32 + world.conditions.water * 1.18 + world.conditions.mystery * .92];
+}
+
+function residentPigment(particle, world) {
+  const needs = particle.needs;
+  const experiential = [58 + needs.belonging * .98, 50 + needs.food * .96 + particle.knownSites.length * 11, 56 + needs.wonder * .98 + Math.min(88, particle.memories * 7)];
+  return mixPigments([particle.pigment, particle.imprint, experiential, worldPigment(world), particle.carrying?.pigment], [.36, .3, .2, .14, particle.carrying ? .36 : 0]);
+}
+
+function settlementPigment(snapshot, index) {
+  const work = snapshot.works?.[index];
+  const residents = snapshot.particles.filter((particle) => particle.homeIndex === index);
+  const residentMix = residents.length ? mixPigments(residents.map((particle) => residentPigment(particle, snapshot.world))) : [120, 150, 130];
+  const materials = work?.pigments?.length ? mixPigments(work.pigments) : null;
+  return mixPigments([residentMix, materials, work?.culturePigment], [.58, materials ? .3 : 0, .12]);
+}
 
 function seededRandom(value) {
   let state = value >>> 0;
@@ -82,13 +109,13 @@ export function createCinematicRenderer(canvas) {
     return tree;
   }
 
-  function makeHouse(index) {
+  function makeHouse(index, pigment) {
     const house = new THREE.Group();
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.52, 0.64), new THREE.MeshStandardMaterial({ color: index % 2 ? 0x84653e : 0x6f5435, roughness: 1 }));
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.52, 0.64), new THREE.MeshStandardMaterial({ color: pigmentColor(mixPigments([pigment, [123, 82, 46]], [.55, .45])), roughness: 1 }));
     wall.position.y = 0.28;
     wall.castShadow = true;
     wall.receiveShadow = true;
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.64, 0.48, 4), new THREE.MeshStandardMaterial({ color: index % 3 ? 0x403226 : 0x594131, roughness: 1, flatShading: true }));
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.64, 0.48, 4), new THREE.MeshStandardMaterial({ color: pigmentColor(mixPigments([pigment, [55, 39, 30]], [index % 3 ? .38 : .54, index % 3 ? .62 : .46])), roughness: 1, flatShading: true }));
     roof.rotation.y = Math.PI * 0.25;
     roof.position.y = 0.79;
     roof.castShadow = true;
@@ -200,14 +227,15 @@ export function createCinematicRenderer(canvas) {
       const point = mapPoint((settlement.x / 100) * snapshot.width, (settlement.y / 100) * snapshot.height, snapshot);
       const village = new THREE.Group();
       const completed = snapshot.works?.[settlementIndex]?.completed || 0;
+      const pigment = settlementPigment(snapshot, settlementIndex);
       const buildings = Math.max(3, Math.min(8, 3 + Math.floor(settlement.population / 240) + completed));
       for (let buildingIndex = 0; buildingIndex < buildings; buildingIndex += 1) {
-        const building = makeHouse(buildingIndex + settlementIndex);
+        const building = makeHouse(buildingIndex + settlementIndex, pigment);
         building.position.set(((buildingIndex % 3) - 1) * 0.78 + (random() - 0.5) * 0.2, 0, (Math.floor(buildingIndex / 3) - 0.5) * 0.86 + (random() - 0.5) * 0.2);
         building.rotation.y = random() * Math.PI;
         village.add(building);
       }
-      const beacon = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.025, 6, 24), new THREE.MeshBasicMaterial({ color: [0xa8eb93, 0x78e4db, 0xc4a4f2, 0xe3bc76][settlementIndex % 4], transparent: true, opacity: 0.58 }));
+      const beacon = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.025, 6, 24), new THREE.MeshBasicMaterial({ color: pigmentColor(pigment), transparent: true, opacity: 0.58 }));
       beacon.rotation.x = Math.PI / 2;
       beacon.position.y = 0.04;
       village.add(beacon);
@@ -249,7 +277,7 @@ export function createCinematicRenderer(canvas) {
 
   function render(snapshot, now) {
     resize();
-    const completedWorks = (snapshot.works || []).map((work) => work.completed).join(",");
+    const completedWorks = (snapshot.works || []).map((work) => work.completed + ":" + (work.culturePigment || []).map((channel) => Math.round(channel / 20)).join("")).join(",");
     const nextSignature = snapshot.world.seed + ":" + snapshot.world.name + ":" + snapshot.world.settlements.length + ":" + snapshot.particles.length + ":" + completedWorks;
     if (nextSignature !== signature) {
       signature = nextSignature;
@@ -261,9 +289,9 @@ export function createCinematicRenderer(canvas) {
       if (!mesh) return;
       const point = mapPoint(particle.x, particle.y, snapshot);
       mesh.position.set(point.x, 0.08, point.z);
-      mesh.userData.body.material.color.setHex(needColors[particle.activity] || needColors.belonging);
+      mesh.userData.body.material.color.copy(pigmentColor(residentPigment(particle, snapshot.world)));
       mesh.userData.bundle.visible = Boolean(particle.carrying);
-      if (particle.carrying) mesh.userData.bundle.material.color.setHex(particle.carrying === "grain" ? 0xe3bc76 : 0x8a6943);
+      if (particle.carrying) mesh.userData.bundle.material.color.copy(pigmentColor(particle.carrying.pigment));
       mesh.rotation.y = Math.atan2(particle.vx || 0.001, particle.vy || 0.001);
     });
     snapshot.wildlife.forEach((animal, index) => {

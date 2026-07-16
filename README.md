@@ -11,7 +11,8 @@ SEED is an AI-native genesis engine for emergent worlds. It gives autonomous lif
 - Models distinct settlements, collective pressures, local stability, and an evolving chronicle.
 - Gives autonomous residents needs for food, shelter, belonging, and wonder; advancing a turn lets their responses alter the world without a creator decree.
 - Visualizes a live resident field: independent particles pursue needs, remember cross-settlement encounters, form local ties, and feed those exchanges into the next simulation turn.
-- Simulates finite, regenerating grain and timber sources. Residents retain partial site knowledge, discover or exchange routes locally, gather resources, carry them home, and turn delivered timber into a new shelter rather than a scripted upgrade.
+- Simulates finite, regenerating grain and timber sources. Residents retain partial site knowledge, discover or exchange routes locally, gather materials, carry a source-specific pigment home, and turn delivered timber into a new shelter rather than a scripted upgrade.
+- Uses a state-derived RGBA pigment system rather than fixed role colors: residents continuously blend their inherited signal with needs, knowledge, memory, social ties, environmental conditions, and the material they carry. Each shelter inherits the mixed pigment history of the timber that built it.
 - Renders that same state as an original real-time WebGL observation scene: procedural terrain, water, roads, settlement buildings, residents, wildlife, atmospheric light, and a moving observer camera.
 - Lets a creator issue a decree and observe a state-dependent consequence.
 - Surfaces a causal trace so each decree or autonomous action can be connected to the changing conditions it produces.
@@ -57,7 +58,7 @@ creator decree → condition deltas → settlement/faction changes → chronicle
 
 The deterministic simulation owns the truth of the world state. The model enriches the initial world and explains its consequences; it does not replace the system’s causal logic.
 
-The renderer is deliberately a view of the simulation, not a separate animation layer: resident positions and colors come from their current local need, wildlife follows its own habitat behavior, and the camera follows selected settlements or recent encounters. This lets a judge connect what they see to an inspectable causal system.
+The renderer is deliberately a view of the simulation, not a separate animation layer: resident positions, pigments, material bundles, trails, and shelter appearance come from active local state; wildlife follows its own habitat behavior; and the camera follows selected settlements or recent encounters. This lets a judge connect what they see to an inspectable causal system.
 
 The implementation roadmap and official requirements are documented in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 
