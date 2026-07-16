@@ -1,5 +1,3 @@
-import { createCinematicRenderer } from "./cinematic.js";
-
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, Math.round(value)));
@@ -773,9 +771,13 @@ function initialiseEcosystem() {
   ecosystem.canvas = canvas;
   ecosystem.context = canvas.getContext("2d");
   const cinematicCanvas = $("#cinematicCanvas");
-  if (cinematicCanvas) {
-    cinematic = createCinematicRenderer(cinematicCanvas);
-    if (cinematic.enabled && useCinematicWebGL) $("#worldMap").classList.add("cinematic-ready");
+  if (cinematicCanvas && useCinematicWebGL) {
+    import("./cinematic.js").then(({ createCinematicRenderer }) => {
+      cinematic = createCinematicRenderer(cinematicCanvas);
+      if (cinematic.enabled) $("#worldMap").classList.add("cinematic-ready");
+    }).catch(() => {
+      cinematic = null;
+    });
   }
   ecosystem.canvas.addEventListener("click", (event) => {
     const bounds = ecosystem.canvas.getBoundingClientRect();
