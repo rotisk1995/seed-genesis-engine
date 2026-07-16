@@ -12,3 +12,5 @@ unreal/**/DerivedDataCache/
 unreal/**/Intermediate/
 unreal/**/Saved/
 unreal/**/.vs/
+__pycache__/
+*.py[cod]
