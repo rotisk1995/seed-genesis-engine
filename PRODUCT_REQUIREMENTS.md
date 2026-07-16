@@ -31,16 +31,16 @@ The current demonstration prioritizes an inspectable causal loop:
 
 1. Residents move in real time based on independent food, shelter, belonging, and curiosity needs.
 2. Residents remember encounters and form local cross-settlement ties.
-3. Resource sites and shared destinations create visible flows, trails, and encounter rings.
+3. Resource sites and shared destinations create visible activity, diffusion, and memory traces in a cellular field rather than icon-driven characters or buildings.
 4. Food and timber are finite, regenerating local sources. Residents begin with partial site knowledge, discover locations through movement, and exchange routes during encounters before gathering and carrying resources home.
-5. Local stores, visible site depletion, and delivered timber produce a shelter project; no building appears from a preset event.
+5. Local stores, visible site depletion, and delivered timber produce a persistent lattice form; no building or settlement icon appears from a preset event.
 6. Resource sites generate their own pigments from seed, location, availability, and environmental conditions. Residents blend these materials with evolving individual, social, and ecological state; construction preserves the actual delivered timber pigment history.
 7. Advancing a world turn aggregates resident needs, deliveries, construction, and local exchanges into agent state, abundance, cohesion, chronicle entries, and larger patterns.
 8. Creator decrees change the conditions that residents subsequently experience.
 
-## Cinematic observation
+## Cellular observation
 
-Emergent Village is presented as an original elevated observer simulation. The camera follows settlements and meaningful encounters through a living terrain with readable residents, wildlife, construction, weather, and a day-night cycle. Information overlays remain compact and support observation; they do not replace the world as the primary experience.
+Emergent Village is presented as an original dark cellular substrate. Local rules activate, diffuse, stabilize, exchange pigment, and leave structural lattice behind. Information overlays remain compact and support observation; they do not replace the field as the primary experience.
 
 ## Success criteria
 

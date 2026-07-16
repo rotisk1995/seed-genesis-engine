@@ -10,10 +10,10 @@ SEED is an AI-native genesis engine for emergent worlds. It gives autonomous lif
 - Simulates world conditions: water, abundance, cohesion, and mystery.
 - Models distinct settlements, collective pressures, local stability, and an evolving chronicle.
 - Gives autonomous residents needs for food, shelter, belonging, and wonder; advancing a turn lets their responses alter the world without a creator decree.
-- Visualizes a live resident field: independent particles pursue needs, remember cross-settlement encounters, form local ties, and feed those exchanges into the next simulation turn.
+- Visualizes a live cellular field: independent simulation particles pursue needs, remember cross-settlement encounters, form local ties, and deposit their effects into a visible grid rather than appearing as pre-authored characters.
 - Simulates finite, regenerating grain and timber sources. Residents retain partial site knowledge, discover or exchange routes locally, gather materials, carry a source-specific pigment home, and turn delivered timber into a new shelter rather than a scripted upgrade.
 - Uses a state-derived RGBA pigment system rather than fixed role colors: residents continuously blend their inherited signal with needs, knowledge, memory, social ties, environmental conditions, and the material they carry. Each shelter inherits the mixed pigment history of the timber that built it.
-- Renders that same state as an original real-time WebGL observation scene: procedural terrain, water, roads, settlement buildings, residents, wildlife, atmospheric light, and a moving observer camera.
+- Renders that same state as a real-time cellular substrate: material movement ignites colored local cells, encounters diffuse memory, and delivered timber leaves persistent lattice forms. No resident, house, or settlement icon is drawn as a preset object.
 - Lets a creator issue a decree and observe a state-dependent consequence.
 - Surfaces a causal trace so each decree or autonomous action can be connected to the changing conditions it produces.
 - Uses GPT-5.6 for structured world genesis and narrative consequence when an API key is available; remains fully usable with its deterministic simulation fallback.
@@ -58,7 +58,7 @@ creator decree → condition deltas → settlement/faction changes → chronicle
 
 The deterministic simulation owns the truth of the world state. The model enriches the initial world and explains its consequences; it does not replace the system’s causal logic.
 
-The renderer is deliberately a view of the simulation, not a separate animation layer: resident positions, pigments, material bundles, trails, and shelter appearance come from active local state; wildlife follows its own habitat behavior; and the camera follows selected settlements or recent encounters. This lets a judge connect what they see to an inspectable causal system.
+The renderer is deliberately a view of the simulation, not a separate animation layer: active cells, pigment diffusion, material flux, and persistent lattice formation come from active local state. This lets a judge connect what they see to an inspectable causal system without mistaking an icon for an outcome.
 
 The implementation roadmap and official requirements are documented in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 
