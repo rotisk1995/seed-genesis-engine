@@ -162,6 +162,7 @@ function renderTrace() {
 const needColors = { food: "#a8eb93", shelter: "#78e4db", belonging: "#c4a4f2", wonder: "#e3bc76" };
 const ecosystem = { canvas: null, context: null, width: 0, height: 0, terrain: null, particles: [], wildlife: [], encounters: [], exchanges: 0, deliveries: 0, settlementWorks: [], lastCommittedExchanges: 0, lastCommittedDeliveries: 0, lastCommittedConstruction: 0, lastFrame: 0, lastReadout: 0, running: false, reducedMotion: false, camera: { x: 0, y: 0, zoom: 1.16, focus: "" } };
 let cinematic = null;
+const useCinematicWebGL = new URLSearchParams(window.location.search).get("renderer") === "webgl";
 
 function fieldSites() {
   return [
@@ -654,7 +655,7 @@ function drawSettlementLabels(context) {
 }
 
 function drawEcosystem(now) {
-  if (cinematic?.enabled) {
+  if (cinematic?.enabled && useCinematicWebGL) {
     updateCinematicCamera(now);
     cinematic.render({ world, particles: ecosystem.particles, wildlife: ecosystem.wildlife, encounters: ecosystem.encounters, works: ecosystem.settlementWorks, selectedIndex, width: ecosystem.width, height: ecosystem.height }, now);
     if (now - ecosystem.lastReadout > 550) {
@@ -774,7 +775,7 @@ function initialiseEcosystem() {
   const cinematicCanvas = $("#cinematicCanvas");
   if (cinematicCanvas) {
     cinematic = createCinematicRenderer(cinematicCanvas);
-    if (cinematic.enabled) $("#worldMap").classList.add("cinematic-ready");
+    if (cinematic.enabled && useCinematicWebGL) $("#worldMap").classList.add("cinematic-ready");
   }
   ecosystem.canvas.addEventListener("click", (event) => {
     const bounds = ecosystem.canvas.getBoundingClientRect();
