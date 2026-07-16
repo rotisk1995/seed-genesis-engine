@@ -62,6 +62,12 @@ The renderer is deliberately a view of the simulation, not a separate animation 
 
 The implementation roadmap and official requirements are documented in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 
+## Unreal prototype
+
+`unreal/SEEDGenesis` is the 3D SEED prototype for Unreal Engine 5.8. It uses deterministic procedural terrain, vegetation, resources, resident bodies, and houses. Residents visibly travel between resource sites and settlements; material deliveries cause additional houses to appear over time.
+
+Open `unreal/SEEDGenesis/SEEDGenesis.uproject` in Unreal Engine 5.8, allow it to compile the C++ module, then press Play. It does not require marketplace assets: residents, terrain, trees, resource markers, and buildings are generated from engine geometry at runtime.
+
 ## OpenAI Build Week
 
 SEED is built with Codex and GPT-5.6 for OpenAI Build Week.
