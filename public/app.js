@@ -227,11 +227,19 @@ function settlementPigment(index) {
 
 const clampUnit = (value) => Math.max(0, Math.min(1, value));
 
+function vividPigment(pigment, intensity = 1) {
+  const luminance = pigment[0] * .2126 + pigment[1] * .7152 + pigment[2] * .0722;
+  const saturated = pigment.map((channel) => luminance + (channel - luminance) * 1.85);
+  const peak = Math.max(...saturated, 1);
+  const lift = Math.min(1.48, 182 / peak);
+  return saturated.map((channel) => clampChannel(channel * lift * intensity));
+}
+
 function rebuildCellField() {
   if (!ecosystem.width || !ecosystem.height) return;
-  const targetCell = Math.max(9, Math.min(14, ecosystem.width / 54));
-  ecosystem.cellColumns = Math.max(32, Math.floor(ecosystem.width / targetCell));
-  ecosystem.cellRows = Math.max(24, Math.floor(ecosystem.height / targetCell));
+  const targetCell = Math.max(6.5, Math.min(7.5, ecosystem.width / 96));
+  ecosystem.cellColumns = Math.max(72, Math.floor(ecosystem.width / targetCell));
+  ecosystem.cellRows = Math.max(54, Math.floor(ecosystem.height / targetCell));
   ecosystem.cellWidth = ecosystem.width / ecosystem.cellColumns;
   ecosystem.cellHeight = ecosystem.height / ecosystem.cellRows;
   ecosystem.cells = Array.from({ length: ecosystem.cellColumns * ecosystem.cellRows }, () => ({ charge: 0, nextCharge: 0, pigment: [0, 0, 0], nextPigment: [0, 0, 0], construction: 0, memory: 0 }));
@@ -283,7 +291,10 @@ function exciteCellField(now, dt) {
   ecosystem.particles.forEach((particle) => {
     const pigment = residentPigment(particle, now);
     const speed = Math.min(1, Math.hypot(particle.vx, particle.vy) / 1.2);
-    chargeFieldAt(particle.x, particle.y, pigment, (.028 + speed * .05) * dt, 0, particle.memories > 0 ? .004 * dt : 0);
+    const spread = ecosystem.cellWidth * (1.15 + Math.sin(now / 1400 + particle.phase * 9) * .35);
+    const localX = particle.x + Math.cos(particle.seed * .017 + now / 3300) * spread;
+    const localY = particle.y + Math.sin(particle.seed * .013 + now / 2800) * spread;
+    chargeFieldAt(localX, localY, pigment, (.028 + speed * .05) * dt, 0, particle.memories > 0 ? .004 * dt : 0);
     if (particle.carrying) {
       const offsetX = particle.vx * 7;
       const offsetY = particle.vy * 7;
@@ -307,7 +318,6 @@ function exciteCellField(now, dt) {
   });
 
   const columns = ecosystem.cellColumns;
-  const rows = ecosystem.cellRows;
   ecosystem.cells.forEach((cell, index) => {
     const column = index % columns;
     const row = Math.floor(index / columns);
@@ -332,12 +342,12 @@ function exciteCellField(now, dt) {
       }
     }
     const meanCharge = neighbors ? neighborCharge / neighbors : 0;
-    const reproduction = activeNeighbors === 2 || activeNeighbors === 3 ? .026 : activeNeighbors >= 5 ? -.035 : 0;
+    const reproduction = activeNeighbors === 3 && meanCharge > .075 ? .052 : activeNeighbors === 2 && cell.charge > .1 ? .014 : activeNeighbors >= 5 ? -.055 : 0;
     const neighborAveragePigment = neighborCharge > .005 ? neighborPigment.map((channel) => channel / neighborCharge) : cell.pigment;
-    cell.nextCharge = clampUnit(cell.charge * .855 + meanCharge * .23 + reproduction + cell.construction * .035);
-    cell.nextPigment = neighborCharge > .005 ? mixPigments([cell.pigment, neighborAveragePigment], [cell.charge * .82 + .01, neighborCharge * .18]) : cell.pigment;
-    cell.construction = clampUnit(cell.construction * .996 + neighborConstruction / Math.max(1, neighbors) * .012);
-    cell.memory = clampUnit(cell.memory * .993 + neighborMemory / Math.max(1, neighbors) * .008);
+    cell.nextCharge = clampUnit(cell.charge * .74 + meanCharge * .09 + reproduction + cell.construction * .015);
+    cell.nextPigment = neighborCharge > .005 ? mixPigments([cell.pigment, neighborAveragePigment], [cell.charge * .9 + .01, neighborCharge * .1]) : cell.pigment;
+    cell.construction = clampUnit(cell.construction * .995);
+    cell.memory = clampUnit(cell.memory * .985 + neighborMemory / Math.max(1, neighbors) * .002);
   });
   ecosystem.cells.forEach((cell) => {
     cell.charge = cell.nextCharge;
@@ -1023,36 +1033,24 @@ function drawEcosystem(now) {
   context.fillStyle = "rgb(2,5,5)";
   context.fillRect(0, 0, ecosystem.width, ecosystem.height);
 
-  const cellInset = Math.max(.65, Math.min(1.25, ecosystem.cellWidth * .08));
   ecosystem.cells.forEach((cell, index) => {
     const charge = cell.charge;
     if (charge < .035) return;
     const column = index % ecosystem.cellColumns;
     const row = Math.floor(index / ecosystem.cellColumns);
-    const x = column * ecosystem.cellWidth + cellInset;
-    const y = row * ecosystem.cellHeight + cellInset;
-    const width = Math.max(1, ecosystem.cellWidth - cellInset * 2);
-    const height = Math.max(1, ecosystem.cellHeight - cellInset * 2);
+    const x = column * ecosystem.cellWidth;
+    const y = row * ecosystem.cellHeight;
+    const width = ecosystem.cellWidth + .35;
+    const height = ecosystem.cellHeight + .35;
     const intensity = clampUnit(charge * (.74 + cell.memory * .18));
-    context.fillStyle = rgba(cell.pigment, .08 + intensity * .74);
+    const pigment = vividPigment(cell.pigment, .94 + intensity * .22);
+    context.fillStyle = rgba(pigment, .12 + intensity * .86);
     context.fillRect(x, y, width, height);
     if (cell.construction > .09) {
-      context.strokeStyle = rgba(mixPigments([cell.pigment, [236, 245, 232]], [.76, .24]), .18 + cell.construction * .72);
-      context.lineWidth = Math.max(.7, ecosystem.cellWidth * .075);
-      context.strokeRect(x + 1, y + 1, Math.max(1, width - 2), Math.max(1, height - 2));
+      context.fillStyle = rgba(vividPigment(mixPigments([pigment, [255, 255, 255]], [.82, .18])), .22 + cell.construction * .66);
+      context.fillRect(x, y, width, height);
     }
   });
-
-  context.strokeStyle = "rgba(151,178,164,.09)";
-  context.lineWidth = .55;
-  for (let column = 0; column <= ecosystem.cellColumns; column += 1) {
-    const x = Math.round(column * ecosystem.cellWidth) + .5;
-    context.beginPath(); context.moveTo(x, 0); context.lineTo(x, ecosystem.height); context.stroke();
-  }
-  for (let row = 0; row <= ecosystem.cellRows; row += 1) {
-    const y = Math.round(row * ecosystem.cellHeight) + .5;
-    context.beginPath(); context.moveTo(0, y); context.lineTo(ecosystem.width, y); context.stroke();
-  }
 
   const activeCells = ecosystem.cells.reduce((sum, cell) => sum + (cell.charge > .11 ? 1 : 0), 0);
   const constructedCells = ecosystem.cells.reduce((sum, cell) => sum + (cell.construction > .12 ? 1 : 0), 0);
